@@ -1,9 +1,8 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
-import requests
-from io import StringIO
 
 # =============================================================================
 # 1. CONFIGURATION
@@ -11,76 +10,79 @@ from io import StringIO
 st.set_page_config(page_title="Sébazac 360°", page_icon="📊", layout="wide")
 
 # =============================================================================
-# 2. MOTEUR DE DONNÉES (Connexion "Naviguateur")
+# 2. MOTEUR DE DONNÉES (LECTURE FICHIERS LOCAUX)
 # =============================================================================
-@st.cache_data(ttl=600)
+@st.cache_data
 def load_data():
-    # ID du Sheet et des Onglets (Vos IDs exacts)
-    SHEET_ID = "1GzL2TZE7X2z7HaO3rgxBbPh8xZfoNw4OxNHBw8YtK5c"
-    GID_HORAIRE = "2017923547" 
-    GID_FAMILLE = "1480957905"
-    
-    # Fonction de téléchargement "déguisée" en navigateur
-    def get_google_sheet_csv(sheet_id, gid):
-        url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
-        # L'astuce est ici : on se fait passer pour un navigateur Mozilla
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+    # Noms des fichiers sur GitHub
+    FILE_HORAIRE = "horaires.csv"
+    FILE_FAMILLE = "familles.csv"
+
+    try:
+        # Lecture directe
+        df_h = pd.read_csv(FILE_HORAIRE)
+        df_d = pd.read_csv(FILE_FAMILLE)
+
+        # --- NETTOYAGE HORAIRES ---
+        df_h.columns = df_h.columns.str.strip()
         
-        try:
-            response = requests.get(url, headers=headers, timeout=10)
-            response.raise_for_status() # Lève une erreur si lien mort ou interdit
-            return pd.read_csv(StringIO(response.text))
-        except Exception as e:
-            st.error(f"Erreur d'accès à l'onglet GID={gid}. Vérifiez que le lien est bien 'Tous les utilisateurs disposant du lien'. Détail: {e}")
-            st.stop()
+        # Mapping des colonnes (Vos noms -> Code)
+        col_map_h = {
+            'Période': 'Date', 
+            'Nombre de clients': 'Clients', 
+            'CA TTC': 'CA'
+        }
+        df_h = df_h.rename(columns={k: v for k, v in col_map_h.items() if k in df_h.columns})
+        
+        # Conversion Date
+        df_h['Date'] = pd.to_datetime(df_h['Date'], errors='coerce') # Gère le format YYYY-MM-DD automatiquement
+        df_h = df_h.dropna(subset=['Date'])
+        
+        df_h['Mois'] = df_h['Date'].dt.strftime('%Y-%m')
+        df_h['JourSemaine'] = df_h['Date'].dt.dayofweek
+        
+        # Nettoyage Heure (Format "07:00 - 08:00")
+        def clean_hour(val):
+            try:
+                s = str(val).strip()
+                # Prend les 2 premiers caractères ("07" -> 7)
+                return int(s[:2])
+            except:
+                return 0
+        df_h['Heure'] = df_h['Heure'].apply(clean_hour)
+        df_h['HeureLabel'] = df_h['Heure'].astype(str) + "h"
 
-    # Chargement
-    df_h = get_google_sheet_csv(SHEET_ID, GID_HORAIRE)
-    df_d = get_google_sheet_csv(SHEET_ID, GID_FAMILLE)
+        # --- NETTOYAGE FAMILLES ---
+        df_d.columns = df_d.columns.str.strip()
+        col_map_d = {
+            'FAMILLE': 'Famille', 
+            'Période': 'Date', 
+            'CA TTC': 'CA'
+        }
+        df_d = df_d.rename(columns={k: v for k, v in col_map_d.items() if k in df_d.columns})
+        
+        df_d['Date'] = pd.to_datetime(df_d['Date'], errors='coerce')
+        df_d = df_d.dropna(subset=['Date'])
+        df_d['Mois'] = df_d['Date'].dt.strftime('%Y-%m')
 
-    # --- NETTOYAGE HORAIRES (ANALYSE HORAIRE.csv) ---
-    df_h.columns = df_h.columns.str.strip()
-    
-    # Mapping exact basé sur vos fichiers
-    col_map_h = {'Période': 'Date', 'Nombre de clients': 'Clients', 'CA TTC': 'CA'}
-    df_h = df_h.rename(columns={k: v for k, v in col_map_h.items() if k in df_h.columns})
-    
-    # Nettoyage format Date (2024-11-01)
-    df_h['Date'] = pd.to_datetime(df_h['Date'], errors='coerce')
-    df_h = df_h.dropna(subset=['Date'])
-    
-    df_h['Mois'] = df_h['Date'].dt.strftime('%Y-%m')
-    df_h['JourSemaine'] = df_h['Date'].dt.dayofweek
-    
-    # Nettoyage Heure ("07:00 - 08:00" -> 7)
-    def clean_hour(val):
-        try:
-            return int(str(val).split(':')[0])
-        except:
-            return 0
-    df_h['Heure'] = df_h['Heure'].apply(clean_hour)
-    df_h['HeureLabel'] = df_h['Heure'].astype(str) + "h"
+        return df_h, df_d
 
-    # --- NETTOYAGE FAMILLES (ANALYSE FAMILLES.csv) ---
-    df_d.columns = df_d.columns.str.strip()
-    col_map_d = {'FAMILLE': 'Famille', 'Période': 'Date', 'CA TTC': 'CA'}
-    df_d = df_d.rename(columns={k: v for k, v in col_map_d.items() if k in df_d.columns})
-    
-    df_d['Date'] = pd.to_datetime(df_d['Date'], errors='coerce')
-    df_d = df_d.dropna(subset=['Date'])
-    df_d['Mois'] = df_d['Date'].dt.strftime('%Y-%m')
+    except FileNotFoundError as e:
+        st.error(f"❌ Fichier introuvable : {e.filename}")
+        st.info("Vérifiez que vous avez bien uploadé 'horaires.csv' et 'familles.csv' sur GitHub.")
+        st.stop()
+    except Exception as e:
+        st.error(f"❌ Erreur de lecture : {e}")
+        st.stop()
 
-    return df_h, df_d
-
-# Lancement du chargement
 df_hourly, df_daily = load_data()
 
 # =============================================================================
-# 3. INTERFACE (IDENTIQUE À LA VERSION VALIDÉE)
+# 3. INTERFACE
 # =============================================================================
 
 if df_hourly.empty:
-    st.error("Données vides. Vérifiez le contenu du fichier Google Sheet.")
+    st.warning("Données vides.")
     st.stop()
 
 with st.sidebar:
@@ -93,7 +95,8 @@ with st.sidebar:
     
     if view_mode == "Mensuelle" and not df_hourly.empty:
         months = sorted(df_hourly['Mois'].unique(), reverse=True)
-        selected_month = st.selectbox("Mois", months)
+        if months:
+            selected_month = st.selectbox("Mois", months)
 
 # Filtrage dynamique
 if view_mode == "Mensuelle" and selected_month:
@@ -178,6 +181,7 @@ elif page == "Stratégie Panier":
 # --- PAGE 3 : STAFFING ---
 elif page == "Staffing":
     st.title("👥 Matrice de Staffing")
+    st.write("Moyenne des clients par créneau pour la période sélectionnée.")
     
     if not data_h.empty:
         pivot = data_h.groupby(['JourSemaine', 'Heure'])['Clients'].mean().reset_index()
