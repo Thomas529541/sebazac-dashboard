@@ -10,7 +10,7 @@ import plotly.express as px
 st.set_page_config(page_title="Sébazac 360°", page_icon="📊", layout="wide")
 
 # =============================================================================
-# 2. MOTEUR DE DONNÉES (LECTURE VIA GVIZ API)
+# 2. MOTEUR DE DONNÉES (LECTURE VIA GVIZ API + NETTOYAGE)
 # =============================================================================
 @st.cache_data(ttl=600)
 def load_data():
@@ -21,39 +21,59 @@ def load_data():
     gid_horaire = "2017923547" 
     gid_famille = "1480957905"
     
-    # --- SOLUTION GVIZ (API Google Visualization) ---
-    # Cette URL est beaucoup plus robuste que /export?format=csv
-    # Elle évite les erreurs 400 Bad Request
+    # URLs GVIZ (Format CSV propre)
     url_horaire = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&gid={gid_horaire}"
     url_famille = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&gid={gid_famille}"
 
     try:
-        # Lecture directe avec Pandas
-        # on_bad_lines='skip' permet d'ignorer les lignes mal formées éventuelles
+        # LECTURE ROBUSTE : on_bad_lines='skip' ignore les lignes cassées
         df_h = pd.read_csv(url_horaire, on_bad_lines='skip')
         df_d = pd.read_csv(url_famille, on_bad_lines='skip')
 
         # --- NETTOYAGE HORAIRES ---
+        # On supprime les espaces dans les noms de colonnes
         df_h.columns = df_h.columns.str.strip()
-        col_mapping_h = {'Période': 'Date', 'Nombre de clients': 'Clients', 'CA TTC': 'CA'}
-        df_h = df_h.rename(columns={k: v for k, v in col_mapping_h.items() if k in df_h.columns})
         
-        # Vérification si la lecture a marché
+        # Mapping des colonnes (Vos noms -> Code)
+        col_map_h = {
+            'Période': 'Date', 
+            'Nombre de clients': 'Clients', 
+            'CA TTC': 'CA'
+        }
+        df_h = df_h.rename(columns={k: v for k, v in col_map_h.items() if k in df_h.columns})
+        
+        # Si la colonne Date n'est pas trouvée, c'est peut-être un problème de header décalé
         if 'Date' not in df_h.columns:
-             # Tentative de secours : parfois les headers sont décalés
-             # On recharge sans header et on renomme manuellement si besoin
-             st.warning("Structure CSV inattendue, tentative de réparation...")
-             return pd.DataFrame(), pd.DataFrame()
+             # On tente de recharger en sautant les premières lignes (cas fréquent d'export avec titre)
+             try:
+                 df_h = pd.read_csv(url_horaire, on_bad_lines='skip', skiprows=1) # On saute la ligne 1
+                 df_h.columns = df_h.columns.str.strip()
+                 df_h = df_h.rename(columns={k: v for k, v in col_map_h.items() if k in df_h.columns})
+             except:
+                 pass
 
+        if 'Date' not in df_h.columns:
+            st.error("Erreur critique : Impossible de trouver la colonne 'Période' dans l'onglet HORAIRE après tentative de réparation.")
+            st.write("Colonnes trouvées :", df_h.columns.tolist())
+            st.stop()
+
+        # Conversion des données
         df_h['Date'] = pd.to_datetime(df_h['Date'], dayfirst=True, errors='coerce')
-        df_h = df_h.dropna(subset=['Date'])
+        df_h = df_h.dropna(subset=['Date']) # On vire les totaux en bas de fichier
+        
+        # Nettoyage des chiffres (parfois "1 200,00" est lu comme texte)
+        if df_h['CA'].dtype == object:
+            df_h['CA'] = df_h['CA'].astype(str).str.replace(' ', '').str.replace(',', '.').astype(float)
+        if df_h['Clients'].dtype == object:
+            df_h['Clients'] = df_h['Clients'].astype(str).str.replace(' ', '').str.replace(',', '.').astype(float)
+
         df_h['Mois'] = df_h['Date'].dt.strftime('%Y-%m')
         df_h['JourSemaine'] = df_h['Date'].dt.dayofweek
         
         def clean_hour(val):
             try:
-                # Nettoie "07:00" -> 7
-                return int(str(val).strip()[:2].replace(':', ''))
+                s = str(val).strip()
+                return int(s[:2].replace(':', ''))
             except:
                 return 0
         df_h['Heure'] = df_h['Heure'].apply(clean_hour)
@@ -61,19 +81,30 @@ def load_data():
 
         # --- NETTOYAGE FAMILLES ---
         df_d.columns = df_d.columns.str.strip()
-        col_mapping_d = {'FAMILLE': 'Famille', 'Période': 'Date', 'CA TTC': 'CA'}
-        df_d = df_d.rename(columns={k: v for k, v in col_mapping_d.items() if k in df_d.columns})
+        col_map_d = {'FAMILLE': 'Famille', 'Période': 'Date', 'CA TTC': 'CA'}
+        df_d = df_d.rename(columns={k: v for k, v in col_map_d.items() if k in df_d.columns})
         
+        # Même logique de réparation pour Familles
+        if 'Date' not in df_d.columns:
+             try:
+                 df_d = pd.read_csv(url_famille, on_bad_lines='skip', skiprows=1)
+                 df_d.columns = df_d.columns.str.strip()
+                 df_d = df_d.rename(columns={k: v for k, v in col_map_d.items() if k in df_d.columns})
+             except:
+                 pass
+
         df_d['Date'] = pd.to_datetime(df_d['Date'], dayfirst=True, errors='coerce')
         df_d = df_d.dropna(subset=['Date'])
+        
+        if df_d['CA'].dtype == object:
+            df_d['CA'] = df_d['CA'].astype(str).str.replace(' ', '').str.replace(',', '.').astype(float)
+            
         df_d['Mois'] = df_d['Date'].dt.strftime('%Y-%m')
 
         return df_h, df_d
 
     except Exception as e:
-        st.error(f"❌ Erreur critique : {e}")
-        st.info("Vérifiez que le fichier est bien 'Public > Tous les utilisateurs avec le lien'.")
-        # On ne passe PAS en mode démo pour voir la vraie erreur
+        st.error(f"❌ Erreur technique : {e}")
         st.stop()
 
 df_hourly, df_daily = load_data()
@@ -83,7 +114,7 @@ df_hourly, df_daily = load_data()
 # =============================================================================
 
 if df_hourly.empty:
-    st.error("Données vides. Le fichier a été lu mais ne contient pas les colonnes attendues.")
+    st.error("Données vides. Vérifiez le contenu du Google Sheet.")
     st.stop()
 
 with st.sidebar:
@@ -98,6 +129,7 @@ with st.sidebar:
         months = sorted(df_hourly['Mois'].unique(), reverse=True)
         selected_month = st.selectbox("Mois", months)
 
+# Filtrage dynamique
 if view_mode == "Mensuelle" and selected_month:
     data_h = df_hourly[df_hourly['Mois'] == selected_month]
     data_d = df_daily[df_daily['Mois'] == selected_month]
@@ -194,7 +226,6 @@ elif page == "Staffing":
     
     if not data_h.empty:
         pivot = data_h.groupby(['JourSemaine', 'Heure'])['Clients'].mean().reset_index()
-        
         days_map = {0:'Lundi', 1:'Mardi', 2:'Mercredi', 3:'Jeudi', 4:'Vendredi', 5:'Samedi', 6:'Dimanche'}
         pivot['JourLabel'] = pivot['JourSemaine'].map(days_map)
         
