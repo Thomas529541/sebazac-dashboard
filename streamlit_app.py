@@ -13,11 +13,24 @@ st.set_page_config(page_title="Sébazac 360°", page_icon="📊", layout="wide")
 # =============================================================================
 # 2. MOTEUR DE DONNÉES (GOOGLE SHEETS)
 # =============================================================================
-@st.cache_data(ttl=600) # Mise en cache 10 minutes pour éviter de trop appeler Google
+@st.cache_data
 def load_data():
-    # Création de la connexion
-    conn = st.connection("gsheets", type=GSheetsConnection)
+    # Remplacez par VOTRE lien Google Sheet
+    sheet_url = "https://docs.google.com/spreadsheets/d/1GzL2TZE7X2z7HaO3rgxBbPh8xZfoNw4OxNHBw8YtK5c/edit?usp=sharing"
+    
+    # Astuce pour lire en CSV direct
+    csv_url_h = sheet_url.replace('/edit#gid=', '/export?format=csv&gid=').replace('/edit?usp=sharing', '/export?format=csv&gid=0') 
+    # Attention: Il faut l'ID de l'onglet (gid) pour chaque feuille
+    
+    # ... lecture avec pd.read_csv(csv_url_h) ...
 
+**Mon conseil final :** Utilisez la librairie `st-gsheets-connection` (comme dans le grand code ci-dessus) et activez le partage public sur votre Sheet pour tester. Dans le `secrets.toml` sur Streamlit, mettez juste :
+
+```toml
+[connections.gsheets]
+spreadsheet = "LIEN_DE_VOTRE_GOOGLE_SHEET"
+
+Si le Sheet est public, ça marchera directement !
     try:
         # 1. Lecture Onglet HORAIRES (Worksheet 0 ou par nom)
         # Note: Assurez-vous que vos onglets s'appellent exactement comme ça dans le Sheet
