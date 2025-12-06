@@ -234,5 +234,3 @@ elif page == "Staffing":
         st.plotly_chart(fig_heat, use_container_width=True)
     else:
         st.warning("Pas assez de données pour générer la matrice.")
-```
-```
