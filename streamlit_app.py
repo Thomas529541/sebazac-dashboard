@@ -1,8 +1,9 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
+import requests
+from io import StringIO
 
 # =============================================================================
 # 1. CONFIGURATION
@@ -10,111 +11,76 @@ import plotly.express as px
 st.set_page_config(page_title="Sébazac 360°", page_icon="📊", layout="wide")
 
 # =============================================================================
-# 2. MOTEUR DE DONNÉES (LECTURE VIA GVIZ API + NETTOYAGE)
+# 2. MOTEUR DE DONNÉES (Connexion "Naviguateur")
 # =============================================================================
 @st.cache_data(ttl=600)
 def load_data():
-    # ID de votre Google Sheet
-    sheet_id = "1GzL2TZE7X2z7HaO3rgxBbPh8xZfoNw4OxNHBw8YtK5c"
+    # ID du Sheet et des Onglets (Vos IDs exacts)
+    SHEET_ID = "1GzL2TZE7X2z7HaO3rgxBbPh8xZfoNw4OxNHBw8YtK5c"
+    GID_HORAIRE = "2017923547" 
+    GID_FAMILLE = "1480957905"
     
-    # Vos GID (Identifiants d'onglets)
-    gid_horaire = "2017923547" 
-    gid_famille = "1480957905"
-    
-    # URLs GVIZ (Format CSV propre)
-    url_horaire = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&gid={gid_horaire}"
-    url_famille = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&gid={gid_famille}"
-
-    try:
-        # LECTURE ROBUSTE : on_bad_lines='skip' ignore les lignes cassées
-        df_h = pd.read_csv(url_horaire, on_bad_lines='skip')
-        df_d = pd.read_csv(url_famille, on_bad_lines='skip')
-
-        # --- NETTOYAGE HORAIRES ---
-        # On supprime les espaces dans les noms de colonnes
-        df_h.columns = df_h.columns.str.strip()
+    # Fonction de téléchargement "déguisée" en navigateur
+    def get_google_sheet_csv(sheet_id, gid):
+        url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
+        # L'astuce est ici : on se fait passer pour un navigateur Mozilla
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
         
-        # Mapping des colonnes (Vos noms -> Code)
-        col_map_h = {
-            'Période': 'Date', 
-            'Nombre de clients': 'Clients', 
-            'CA TTC': 'CA'
-        }
-        df_h = df_h.rename(columns={k: v for k, v in col_map_h.items() if k in df_h.columns})
-        
-        # Si la colonne Date n'est pas trouvée, c'est peut-être un problème de header décalé
-        if 'Date' not in df_h.columns:
-             # On tente de recharger en sautant les premières lignes (cas fréquent d'export avec titre)
-             try:
-                 df_h = pd.read_csv(url_horaire, on_bad_lines='skip', skiprows=1) # On saute la ligne 1
-                 df_h.columns = df_h.columns.str.strip()
-                 df_h = df_h.rename(columns={k: v for k, v in col_map_h.items() if k in df_h.columns})
-             except:
-                 pass
-
-        if 'Date' not in df_h.columns:
-            st.error("Erreur critique : Impossible de trouver la colonne 'Période' dans l'onglet HORAIRE après tentative de réparation.")
-            st.write("Colonnes trouvées :", df_h.columns.tolist())
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status() # Lève une erreur si lien mort ou interdit
+            return pd.read_csv(StringIO(response.text))
+        except Exception as e:
+            st.error(f"Erreur d'accès à l'onglet GID={gid}. Vérifiez que le lien est bien 'Tous les utilisateurs disposant du lien'. Détail: {e}")
             st.stop()
 
-        # Conversion des données
-        df_h['Date'] = pd.to_datetime(df_h['Date'], dayfirst=True, errors='coerce')
-        df_h = df_h.dropna(subset=['Date']) # On vire les totaux en bas de fichier
-        
-        # Nettoyage des chiffres (parfois "1 200,00" est lu comme texte)
-        if df_h['CA'].dtype == object:
-            df_h['CA'] = df_h['CA'].astype(str).str.replace(' ', '').str.replace(',', '.').astype(float)
-        if df_h['Clients'].dtype == object:
-            df_h['Clients'] = df_h['Clients'].astype(str).str.replace(' ', '').str.replace(',', '.').astype(float)
+    # Chargement
+    df_h = get_google_sheet_csv(SHEET_ID, GID_HORAIRE)
+    df_d = get_google_sheet_csv(SHEET_ID, GID_FAMILLE)
 
-        df_h['Mois'] = df_h['Date'].dt.strftime('%Y-%m')
-        df_h['JourSemaine'] = df_h['Date'].dt.dayofweek
-        
-        def clean_hour(val):
-            try:
-                s = str(val).strip()
-                return int(s[:2].replace(':', ''))
-            except:
-                return 0
-        df_h['Heure'] = df_h['Heure'].apply(clean_hour)
-        df_h['HeureLabel'] = df_h['Heure'].astype(str) + "h"
+    # --- NETTOYAGE HORAIRES (ANALYSE HORAIRE.csv) ---
+    df_h.columns = df_h.columns.str.strip()
+    
+    # Mapping exact basé sur vos fichiers
+    col_map_h = {'Période': 'Date', 'Nombre de clients': 'Clients', 'CA TTC': 'CA'}
+    df_h = df_h.rename(columns={k: v for k, v in col_map_h.items() if k in df_h.columns})
+    
+    # Nettoyage format Date (2024-11-01)
+    df_h['Date'] = pd.to_datetime(df_h['Date'], errors='coerce')
+    df_h = df_h.dropna(subset=['Date'])
+    
+    df_h['Mois'] = df_h['Date'].dt.strftime('%Y-%m')
+    df_h['JourSemaine'] = df_h['Date'].dt.dayofweek
+    
+    # Nettoyage Heure ("07:00 - 08:00" -> 7)
+    def clean_hour(val):
+        try:
+            return int(str(val).split(':')[0])
+        except:
+            return 0
+    df_h['Heure'] = df_h['Heure'].apply(clean_hour)
+    df_h['HeureLabel'] = df_h['Heure'].astype(str) + "h"
 
-        # --- NETTOYAGE FAMILLES ---
-        df_d.columns = df_d.columns.str.strip()
-        col_map_d = {'FAMILLE': 'Famille', 'Période': 'Date', 'CA TTC': 'CA'}
-        df_d = df_d.rename(columns={k: v for k, v in col_map_d.items() if k in df_d.columns})
-        
-        # Même logique de réparation pour Familles
-        if 'Date' not in df_d.columns:
-             try:
-                 df_d = pd.read_csv(url_famille, on_bad_lines='skip', skiprows=1)
-                 df_d.columns = df_d.columns.str.strip()
-                 df_d = df_d.rename(columns={k: v for k, v in col_map_d.items() if k in df_d.columns})
-             except:
-                 pass
+    # --- NETTOYAGE FAMILLES (ANALYSE FAMILLES.csv) ---
+    df_d.columns = df_d.columns.str.strip()
+    col_map_d = {'FAMILLE': 'Famille', 'Période': 'Date', 'CA TTC': 'CA'}
+    df_d = df_d.rename(columns={k: v for k, v in col_map_d.items() if k in df_d.columns})
+    
+    df_d['Date'] = pd.to_datetime(df_d['Date'], errors='coerce')
+    df_d = df_d.dropna(subset=['Date'])
+    df_d['Mois'] = df_d['Date'].dt.strftime('%Y-%m')
 
-        df_d['Date'] = pd.to_datetime(df_d['Date'], dayfirst=True, errors='coerce')
-        df_d = df_d.dropna(subset=['Date'])
-        
-        if df_d['CA'].dtype == object:
-            df_d['CA'] = df_d['CA'].astype(str).str.replace(' ', '').str.replace(',', '.').astype(float)
-            
-        df_d['Mois'] = df_d['Date'].dt.strftime('%Y-%m')
+    return df_h, df_d
 
-        return df_h, df_d
-
-    except Exception as e:
-        st.error(f"❌ Erreur technique : {e}")
-        st.stop()
-
+# Lancement du chargement
 df_hourly, df_daily = load_data()
 
 # =============================================================================
-# 3. INTERFACE & NAVIGATION
+# 3. INTERFACE (IDENTIQUE À LA VERSION VALIDÉE)
 # =============================================================================
 
 if df_hourly.empty:
-    st.error("Données vides. Vérifiez le contenu du Google Sheet.")
+    st.error("Données vides. Vérifiez le contenu du fichier Google Sheet.")
     st.stop()
 
 with st.sidebar:
@@ -139,9 +105,7 @@ else:
     data_d = df_daily
     title_context = "Année Complète"
 
-# =============================================================================
-# PAGE 1 : VISION GLOBALE (CEO)
-# =============================================================================
+# --- PAGE 1 : VISION GLOBALE ---
 if page == "Vision Globale":
     st.title(f"📊 Vision Globale - {title_context}")
     
@@ -156,6 +120,7 @@ if page == "Vision Globale":
     
     st.markdown("---")
     
+    # Graphique Principal
     if view_mode == "Mensuelle":
         agg = data_h.groupby('Date').agg({'CA':'sum', 'Clients':'sum'}).reset_index()
         agg['Label'] = agg['Date'].dt.strftime('%d')
@@ -176,6 +141,7 @@ if page == "Vision Globale":
     )
     st.plotly_chart(fig, use_container_width=True)
     
+    # Camembert Familles
     st.subheader("Répartition Activités")
     if not data_d.empty:
         fam_agg = data_d.groupby('Famille')['CA'].sum().reset_index()
@@ -186,19 +152,15 @@ if page == "Vision Globale":
         with c_data:
             st.dataframe(fam_agg.sort_values('CA', ascending=False).style.format({'CA': '{:,.0f} €'}), hide_index=True, use_container_width=True)
     else:
-        st.warning("Pas de données Familles.")
+        st.warning("Pas de données Familles disponibles pour cette vue.")
 
-# =============================================================================
-# PAGE 2 : STRATÉGIE PANIER
-# =============================================================================
+# --- PAGE 2 : PANIER ---
 elif page == "Stratégie Panier":
     st.title("🛒 Stratégie Panier & Horaire")
     
     hourly_stats = data_h.groupby('Heure').agg({'CA':'sum', 'Clients':'sum'}).reset_index()
     hourly_stats['Panier'] = hourly_stats['CA'] / hourly_stats['Clients']
     hourly_stats['HeureLabel'] = hourly_stats['Heure'].astype(str) + "h"
-    
-    st.info("💡 **Analyse Chrono-Rentabilité :** Comparez l'affluence (Gris) avec la dépense moyenne (Violet).")
     
     fig_clock = go.Figure()
     fig_clock.add_trace(go.Bar(x=hourly_stats['HeureLabel'], y=hourly_stats['Clients'], name='Flux Clients', marker_color='#cbd5e1', opacity=0.7))
@@ -212,17 +174,10 @@ elif page == "Stratégie Panier":
         height=500
     )
     st.plotly_chart(fig_clock, use_container_width=True)
-    
-    c1, c2 = st.columns(2)
-    c1.warning("⚠️ **Matin** : Si le panier est bas mais le flux élevé, optimisez la vitesse.")
-    c2.success("✅ **Soir** : Si le panier monte, c'est le moment de vendre plus.")
 
-# =============================================================================
-# PAGE 3 : STAFFING
-# =============================================================================
+# --- PAGE 3 : STAFFING ---
 elif page == "Staffing":
     st.title("👥 Matrice de Staffing")
-    st.write("Moyenne des clients par créneau pour la période sélectionnée.")
     
     if not data_h.empty:
         pivot = data_h.groupby(['JourSemaine', 'Heure'])['Clients'].mean().reset_index()
