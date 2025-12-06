@@ -34,8 +34,8 @@ def load_data():
     # Remplacez les GID ci-dessous par les VRAIS GID de votre fichier.
     
     # EXEMPLE (À ADAPTER AVEC VOS VRAIS GID) :
-    gid_horaire = #gid=2017923547
-    gid_famille = #gid=1480957905
+    gid_horaire = 2017923547
+    gid_famille = 1480957905
     
     # Si vous ne trouvez pas les GID, mettez 0 pour tester le premier onglet.
     
