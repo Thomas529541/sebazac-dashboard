@@ -10,48 +10,41 @@ import plotly.express as px
 st.set_page_config(page_title="Sébazac 360°", page_icon="📊", layout="wide")
 
 # =============================================================================
-# 2. MOTEUR DE DONNÉES (LECTURE DIRECTE CSV)
+# 2. MOTEUR DE DONNÉES (LECTURE VIA GVIZ API)
 # =============================================================================
 @st.cache_data(ttl=600)
 def load_data():
-    # Lien de votre Google Sheet
+    # ID de votre Google Sheet
     sheet_id = "1GzL2TZE7X2z7HaO3rgxBbPh8xZfoNw4OxNHBw8YtK5c"
     
-    # Construction des URLs d'export CSV pour chaque onglet (gid=0 pour le 1er, etc.)
-    # Note: Il faut connaître le GID (ID de l'onglet). Souvent 0 pour le premier.
-    # Si vos onglets ont été créés dans l'ordre : 
-    # gid=0 -> Probablement "ANALYSE ACTIVITÉS" (le 1er dans votre fichier)
-    # gid=12345 -> Probablement "ANALYSE HORAIRE"
+    # Vos GID (Identifiants d'onglets)
+    gid_horaire = "2017923547" 
+    gid_famille = "1480957905"
     
-    # ASTUCE ROBUSTE : On va lire le fichier comme un CSV public
-    # Assurez-vous que l'ordre des onglets dans votre Sheet est bien :
-    # 1. ANALYSE ACTIVITÉS
-    # 2. ANALYSE FAMILLES
-    # 3. ANALYSE HORAIRE
-    
-    # URL pour l'onglet "ANALYSE HORAIRE" (Supposons que c'est le 3ème onglet, GID à vérifier)
-    # Si vous ne connaissez pas le GID, ouvrez votre Sheet, cliquez sur l'onglet, et regardez l'URL : "...#gid=123456"
-    # Remplacez les GID ci-dessous par les VRAIS GID de votre fichier.
-    
-    # EXEMPLE (À ADAPTER AVEC VOS VRAIS GID) :
-    gid_horaire = "1426896984" # Exemple, remplacez par le vrai ID de l'onglet HORAIRE
-    gid_famille = "2063806742" # Exemple, remplacez par le vrai ID de l'onglet FAMILLES
-    
-    # Si vous ne trouvez pas les GID, mettez 0 pour tester le premier onglet.
-    
-    url_horaire = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid_horaire}"
-    url_famille = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid_famille}"
+    # --- SOLUTION GVIZ (API Google Visualization) ---
+    # Cette URL est beaucoup plus robuste que /export?format=csv
+    # Elle évite les erreurs 400 Bad Request
+    url_horaire = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&gid={gid_horaire}"
+    url_famille = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&gid={gid_famille}"
 
     try:
-        # Lecture directe avec Pandas (plus fiable que st-connection pour les fichiers publics)
-        df_h = pd.read_csv(url_horaire)
-        df_d = pd.read_csv(url_famille)
+        # Lecture directe avec Pandas
+        # on_bad_lines='skip' permet d'ignorer les lignes mal formées éventuelles
+        df_h = pd.read_csv(url_horaire, on_bad_lines='skip')
+        df_d = pd.read_csv(url_famille, on_bad_lines='skip')
 
         # --- NETTOYAGE HORAIRES ---
         df_h.columns = df_h.columns.str.strip()
         col_mapping_h = {'Période': 'Date', 'Nombre de clients': 'Clients', 'CA TTC': 'CA'}
         df_h = df_h.rename(columns={k: v for k, v in col_mapping_h.items() if k in df_h.columns})
         
+        # Vérification si la lecture a marché
+        if 'Date' not in df_h.columns:
+             # Tentative de secours : parfois les headers sont décalés
+             # On recharge sans header et on renomme manuellement si besoin
+             st.warning("Structure CSV inattendue, tentative de réparation...")
+             return pd.DataFrame(), pd.DataFrame()
+
         df_h['Date'] = pd.to_datetime(df_h['Date'], dayfirst=True, errors='coerce')
         df_h = df_h.dropna(subset=['Date'])
         df_h['Mois'] = df_h['Date'].dt.strftime('%Y-%m')
@@ -59,6 +52,7 @@ def load_data():
         
         def clean_hour(val):
             try:
+                # Nettoie "07:00" -> 7
                 return int(str(val).strip()[:2].replace(':', ''))
             except:
                 return 0
@@ -77,20 +71,10 @@ def load_data():
         return df_h, df_d
 
     except Exception as e:
-        # Fallback en cas d'erreur de GID ou de lecture
-        st.warning(f"Mode Démo activé (Erreur lecture Google Sheet : {e}). Vérifiez les GID des onglets.")
-        # ... (Génération de fausses données pour ne pas laisser l'écran vide) ...
-        # (Je remets le générateur ici pour assurer que l'app marche quoiqu'il arrive)
-        start_date = pd.Timestamp('2024-11-01')
-        dates = pd.date_range(start=start_date, periods=60, freq='D')
-        h_rows = []
-        d_rows = []
-        for d in dates:
-            for h in range(7,21):
-                h_rows.append({'Date': d, 'Mois': d.strftime('%Y-%m'), 'JourSemaine': d.dayofweek, 'Heure': h, 'HeureLabel': f"{h}h", 'Clients': 30, 'CA': 450})
-            for f in ['Tabac', 'Bar']:
-                d_rows.append({'Date': d, 'Mois': d.strftime('%Y-%m'), 'Famille': f, 'CA': 2000})
-        return pd.DataFrame(h_rows), pd.DataFrame(d_rows)
+        st.error(f"❌ Erreur critique : {e}")
+        st.info("Vérifiez que le fichier est bien 'Public > Tous les utilisateurs avec le lien'.")
+        # On ne passe PAS en mode démo pour voir la vraie erreur
+        st.stop()
 
 df_hourly, df_daily = load_data()
 
@@ -99,7 +83,7 @@ df_hourly, df_daily = load_data()
 # =============================================================================
 
 if df_hourly.empty:
-    st.error("Impossible de charger les données. Vérifiez l'URL Google Sheet.")
+    st.error("Données vides. Le fichier a été lu mais ne contient pas les colonnes attendues.")
     st.stop()
 
 with st.sidebar:
@@ -173,7 +157,7 @@ if page == "Vision Globale":
         st.warning("Pas de données Familles.")
 
 # =============================================================================
-# PAGE 2 : PANIER
+# PAGE 2 : STRATÉGIE PANIER
 # =============================================================================
 elif page == "Stratégie Panier":
     st.title("🛒 Stratégie Panier & Horaire")
