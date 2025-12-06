@@ -36,6 +36,7 @@ def load_data():
     # EXEMPLE (À ADAPTER AVEC VOS VRAIS GID) :
     gid_horaire = "1426896984" # Exemple, remplacez par le vrai ID de l'onglet HORAIRE
     gid_famille = "2063806742" # Exemple, remplacez par le vrai ID de l'onglet FAMILLES
+    gid_activites = "193655598" # Exemple, remplacez par le vrai ID de l'onglet Activités
     
     # Si vous ne trouvez pas les GID, mettez 0 pour tester le premier onglet.
     
