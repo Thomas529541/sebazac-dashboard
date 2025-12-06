@@ -10,59 +10,52 @@ from streamlit_gsheets import GSheetsConnection
 # =============================================================================
 st.set_page_config(page_title="Sébazac 360°", page_icon="📊", layout="wide")
 
+# URL de votre Google Sheet (Privé)
+SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1GzL2TZE7X2z7HaO3rgxBbPh8xZfoNw4OxNHBw8YtK5c/edit?usp=sharing"
+
 # =============================================================================
 # 2. MOTEUR DE DONNÉES (GOOGLE SHEETS)
 # =============================================================================
-@st.cache_data
+@st.cache_data(ttl=600) # Mise en cache de 10 min pour la rapidité
 def load_data():
-    # Remplacez par VOTRE lien Google Sheet
-    sheet_url = "https://docs.google.com/spreadsheets/d/1GzL2TZE7X2z7HaO3rgxBbPh8xZfoNw4OxNHBw8YtK5c/edit?usp=sharing"
-    
-    # Astuce pour lire en CSV direct
-    csv_url_h = sheet_url.replace('/edit#gid=', '/export?format=csv&gid=').replace('/edit?usp=sharing', '/export?format=csv&gid=0') 
-    # Attention: Il faut l'ID de l'onglet (gid) pour chaque feuille
-    
-    # ... lecture avec pd.read_csv(csv_url_h) ...
+    # Création de la connexion sécurisée
+    conn = st.connection("gsheets", type=GSheetsConnection)
 
-**Mon conseil final :** Utilisez la librairie `st-gsheets-connection` (comme dans le grand code ci-dessus) et activez le partage public sur votre Sheet pour tester. Dans le `secrets.toml` sur Streamlit, mettez juste :
-
-```toml
-[connections.gsheets]
-spreadsheet = "LIEN_DE_VOTRE_GOOGLE_SHEET"
-
-Si le Sheet est public, ça marchera directement !
     try:
-        # 1. Lecture Onglet HORAIRES (Worksheet 0 ou par nom)
-        # Note: Assurez-vous que vos onglets s'appellent exactement comme ça dans le Sheet
-        df_h = conn.read(worksheet="ANALYSE HORAIRE")
+        # --- 1. LECTURE ONGLET HORAIRES ---
+        # On lit l'onglet 'ANALYSE HORAIRE' (ou le 1er onglet si index 0)
+        df_h = conn.read(spreadsheet=SPREADSHEET_URL, worksheet="ANALYSE HORAIRE")
         
-        # 2. Lecture Onglet FAMILLES
-        df_d = conn.read(worksheet="ANALYSE FAMILLES")
-        
+        # --- 2. LECTURE ONGLET FAMILLES ---
+        df_d = conn.read(spreadsheet=SPREADSHEET_URL, worksheet="ANALYSE FAMILLES")
+
         # --- NETTOYAGE HORAIRES ---
-        # Renommage (Adapter si vos colonnes Google Sheet diffèrent)
+        # Renommage des colonnes (Adapter selon vos entêtes exacts dans le Sheet)
+        # Vos colonnes semblent être : Période, Heure, Nombre de clients, CA TTC
         df_h = df_h.rename(columns={
             'Période': 'Date', 
             'Nombre de clients': 'Clients', 
             'CA TTC': 'CA'
         })
         
-        # Conversion Types
+        # Conversion Date et Heure
         df_h['Date'] = pd.to_datetime(df_h['Date'], dayfirst=True)
         df_h['Mois'] = df_h['Date'].dt.strftime('%Y-%m')
         df_h['JourSemaine'] = df_h['Date'].dt.dayofweek
         
-        # Nettoyage Heure (ex: "07:00 - 08:00" -> 7)
-        def clean_hour(h):
+        # Nettoyage de la colonne Heure (ex: "07:00" -> 7)
+        def clean_hour(val):
             try:
-                return int(str(h)[:2])
+                s = str(val).strip()
+                return int(s[:2]) # Prend les 2 premiers caractères
             except:
                 return 0
-        
+                
         df_h['Heure'] = df_h['Heure'].apply(clean_hour)
         df_h['HeureLabel'] = df_h['Heure'].astype(str) + "h"
 
         # --- NETTOYAGE FAMILLES ---
+        # Vos colonnes : FAMILLE, Période, CA TTC
         df_d = df_d.rename(columns={
             'FAMILLE': 'Famille',
             'Période': 'Date',
@@ -74,7 +67,8 @@ Si le Sheet est public, ça marchera directement !
         return df_h, df_d
 
     except Exception as e:
-        st.error(f"Erreur de connexion Google Sheets : {e}")
+        st.error(f"⚠️ Erreur de connexion au Google Sheet : {e}")
+        st.info("Assurez-vous d'avoir configuré les 'Secrets' dans Streamlit Cloud.")
         st.stop()
 
 df_hourly, df_daily = load_data()
@@ -88,14 +82,14 @@ with st.sidebar:
     page = st.radio("Navigation", ["Vision Globale", "Stratégie Panier", "Staffing"])
     st.markdown("---")
     
+    # Filtre Temporel
     view_mode = st.selectbox("Vue", ["Annuelle", "Mensuelle"])
     selected_month = None
     
-    # Sélecteur dynamique
-    if view_mode == "Mensuelle":
-        if not df_hourly.empty:
-            months = sorted(df_hourly['Mois'].unique(), reverse=True)
-            selected_month = st.selectbox("Mois", months)
+    if view_mode == "Mensuelle" and not df_hourly.empty:
+        # On récupère les mois disponibles dans le fichier
+        months = sorted(df_hourly['Mois'].unique(), reverse=True)
+        selected_month = st.selectbox("Mois", months)
 
 # Filtrage dynamique
 if view_mode == "Mensuelle" and selected_month:
@@ -134,8 +128,16 @@ if page == "Vision Globale":
         agg['Label'] = agg['Mois']
 
     fig = go.Figure()
-    fig.add_trace(go.Bar(x=agg['Label'], y=agg['CA'], name='CA (€)', marker_color='#6366f1', yaxis='y1'))
-    fig.add_trace(go.Scatter(x=agg['Label'], y=agg['Clients'], name='Clients (Nb)', mode='lines+markers', line=dict(color='#10b981', width=3), yaxis='y2'))
+    # Barres CA (Axe Gauche)
+    fig.add_trace(go.Bar(
+        x=agg['Label'], y=agg['CA'], name='CA (€)', 
+        marker_color='#6366f1', yaxis='y1'
+    ))
+    # Ligne Clients (Axe Droit)
+    fig.add_trace(go.Scatter(
+        x=agg['Label'], y=agg['Clients'], name='Clients (Nb)', 
+        mode='lines+markers', line=dict(color='#10b981', width=3), yaxis='y2'
+    ))
     
     fig.update_layout(
         title="Évolution CA vs Clients",
@@ -148,21 +150,24 @@ if page == "Vision Globale":
     
     # Camembert Familles
     st.subheader("Répartition Activités")
-    fam_agg = data_d.groupby('Famille')['CA'].sum().reset_index()
-    
-    c_chart, c_data = st.columns([2, 1])
-    with c_chart:
-        fig_pie = px.pie(fam_agg, values='CA', names='Famille', hole=0.4)
-        st.plotly_chart(fig_pie, use_container_width=True)
-    with c_data:
-        st.dataframe(
-            fam_agg.sort_values('CA', ascending=False).style.format({'CA': '{:,.0f} €'}),
-            hide_index=True, 
-            use_container_width=True
-        )
+    if not data_d.empty:
+        fam_agg = data_d.groupby('Famille')['CA'].sum().reset_index()
+        
+        c_chart, c_data = st.columns([2, 1])
+        with c_chart:
+            fig_pie = px.pie(fam_agg, values='CA', names='Famille', hole=0.4)
+            st.plotly_chart(fig_pie, use_container_width=True)
+        with c_data:
+            st.dataframe(
+                fam_agg.sort_values('CA', ascending=False).style.format({'CA': '{:,.0f} €'}),
+                hide_index=True, 
+                use_container_width=True
+            )
+    else:
+        st.warning("Pas de données Familles pour cette période.")
 
 # =============================================================================
-# PAGE 2 : PANIER
+# PAGE 2 : STRATÉGIE PANIER
 # =============================================================================
 elif page == "Stratégie Panier":
     st.title("🛒 Stratégie Panier & Horaire")
@@ -175,8 +180,16 @@ elif page == "Stratégie Panier":
     st.info("💡 **Analyse Chrono-Rentabilité :** Comparez l'affluence (Gris) avec la dépense moyenne (Violet).")
     
     fig_clock = go.Figure()
-    fig_clock.add_trace(go.Bar(x=hourly_stats['HeureLabel'], y=hourly_stats['Clients'], name='Flux Clients', marker_color='#cbd5e1', opacity=0.7))
-    fig_clock.add_trace(go.Scatter(x=hourly_stats['HeureLabel'], y=hourly_stats['Panier'], name='Panier Moyen (€)', line=dict(color='#4f46e5', width=4), yaxis='y2'))
+    # Flux (Gris)
+    fig_clock.add_trace(go.Bar(
+        x=hourly_stats['HeureLabel'], y=hourly_stats['Clients'], 
+        name='Flux Clients', marker_color='#cbd5e1', opacity=0.7
+    ))
+    # Panier (Ligne Violette)
+    fig_clock.add_trace(go.Scatter(
+        x=hourly_stats['HeureLabel'], y=hourly_stats['Panier'], 
+        name='Panier Moyen (€)', line=dict(color='#4f46e5', width=4), yaxis='y2'
+    ))
     
     fig_clock.update_layout(
         title="Horloge de Rentabilité (Flux vs Panier)",
@@ -186,6 +199,10 @@ elif page == "Stratégie Panier":
         height=500
     )
     st.plotly_chart(fig_clock, use_container_width=True)
+    
+    c1, c2 = st.columns(2)
+    c1.warning("⚠️ **Matin** : Si le panier est bas mais le flux élevé, optimisez la vitesse.")
+    c2.success("✅ **Soir** : Si le panier monte, c'est le moment de vendre plus.")
 
 # =============================================================================
 # PAGE 3 : STAFFING
@@ -195,29 +212,32 @@ elif page == "Staffing":
     st.write("Moyenne des clients par créneau pour la période sélectionnée.")
     
     # Pivot pour Heatmap
-    pivot = data_h.groupby(['JourSemaine', 'Heure'])['Clients'].mean().reset_index()
-    
-    days_map = {0:'Lundi', 1:'Mardi', 2:'Mercredi', 3:'Jeudi', 4:'Vendredi', 5:'Samedi', 6:'Dimanche'}
-    pivot['JourLabel'] = pivot['JourSemaine'].map(days_map)
-    
-    # Création Matrice Carrée (Pivot Table)
-    matrix = pivot.pivot(index='JourLabel', columns='Heure', values='Clients').fillna(0)
-    # Réordonner les jours
-    order = ['Dimanche','Samedi','Vendredi','Jeudi','Mercredi','Mardi','Lundi']
-    matrix = matrix.reindex(order)
-    
-    fig_heat = go.Figure(data=go.Heatmap(
-        z=matrix.values,
-        x=[f"{h}h" for h in matrix.columns],
-        y=matrix.index,
-        colorscale='Purples',
-        hoverongaps=False
-    ))
-    
-    fig_heat.update_layout(
-        title=f"Affluence Moyenne ({title_context})",
-        xaxis_title="Heure de la journée",
-        height=600
-    )
-    
-    st.plotly_chart(fig_heat, use_container_width=True)
+    if not data_h.empty:
+        pivot = data_h.groupby(['JourSemaine', 'Heure'])['Clients'].mean().reset_index()
+        
+        days_map = {0:'Lundi', 1:'Mardi', 2:'Mercredi', 3:'Jeudi', 4:'Vendredi', 5:'Samedi', 6:'Dimanche'}
+        pivot['JourLabel'] = pivot['JourSemaine'].map(days_map)
+        
+        # Matrice carrée
+        matrix = pivot.pivot(index='JourLabel', columns='Heure', values='Clients').fillna(0)
+        # Ordre des jours
+        order = ['Dimanche','Samedi','Vendredi','Jeudi','Mercredi','Mardi','Lundi']
+        matrix = matrix.reindex(order)
+        
+        fig_heat = go.Figure(data=go.Heatmap(
+            z=matrix.values,
+            x=[f"{h}h" for h in matrix.columns],
+            y=matrix.index,
+            colorscale='Purples',
+            hoverongaps=False
+        ))
+        
+        fig_heat.update_layout(
+            title=f"Affluence Moyenne ({title_context})",
+            xaxis_title="Heure de la journée",
+            height=600
+        )
+        
+        st.plotly_chart(fig_heat, use_container_width=True)
+    else:
+        st.warning("Pas assez de données pour générer la matrice.")
