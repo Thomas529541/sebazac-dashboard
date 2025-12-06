@@ -10,44 +10,51 @@ from streamlit_gsheets import GSheetsConnection
 # =============================================================================
 st.set_page_config(page_title="Sébazac 360°", page_icon="📊", layout="wide")
 
-# URL de votre Google Sheet (Privé)
-SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1GzL2TZE7X2z7HaO3rgxBbPh8xZfoNw4OxNHBw8YtK5c/edit?usp=sharing"
-
 # =============================================================================
 # 2. MOTEUR DE DONNÉES (GOOGLE SHEETS)
 # =============================================================================
-@st.cache_data(ttl=600) # Mise en cache de 10 min pour la rapidité
+@st.cache_data(ttl=600) # Mise en cache de 10 min
 def load_data():
-    # Création de la connexion sécurisée
+    # Connexion via les Secrets Streamlit
+    # Assurez-vous d'avoir configuré [connections.gsheets] dans les Secrets
     conn = st.connection("gsheets", type=GSheetsConnection)
 
     try:
         # --- 1. LECTURE ONGLET HORAIRES ---
-        # On lit l'onglet 'ANALYSE HORAIRE' (ou le 1er onglet si index 0)
-        df_h = conn.read(spreadsheet=SPREADSHEET_URL, worksheet="ANALYSE HORAIRE")
+        # Note: Vérifiez bien que l'onglet s'appelle "ANALYSE HORAIRE" dans votre GSheet
+        df_h = conn.read(worksheet="ANALYSE HORAIRE")
         
         # --- 2. LECTURE ONGLET FAMILLES ---
-        df_d = conn.read(spreadsheet=SPREADSHEET_URL, worksheet="ANALYSE FAMILLES")
+        df_d = conn.read(worksheet="ANALYSE FAMILLES")
 
         # --- NETTOYAGE HORAIRES ---
-        # Renommage des colonnes (Adapter selon vos entêtes exacts dans le Sheet)
-        # Vos colonnes semblent être : Période, Heure, Nombre de clients, CA TTC
-        df_h = df_h.rename(columns={
-            'Période': 'Date', 
-            'Nombre de clients': 'Clients', 
-            'CA TTC': 'CA'
-        })
+        # On normalise les noms de colonnes pour éviter les erreurs d'espaces
+        df_h.columns = df_h.columns.str.strip()
         
-        # Conversion Date et Heure
-        df_h['Date'] = pd.to_datetime(df_h['Date'], dayfirst=True)
+        # Mapping des colonnes (Vos noms -> Noms du code)
+        # Vos colonnes probables : 'Période', 'Heure', 'Nombre de clients', 'CA TTC'
+        col_mapping_h = {
+            'Période': 'Date',
+            'Nombre de clients': 'Clients',
+            'CA TTC': 'CA'
+        }
+        # On ne renomme que celles qui existent
+        df_h = df_h.rename(columns={k: v for k, v in col_mapping_h.items() if k in df_h.columns})
+        
+        # Conversion Date
+        df_h['Date'] = pd.to_datetime(df_h['Date'], dayfirst=True, errors='coerce')
+        df_h = df_h.dropna(subset=['Date']) # On vire les lignes vides/totaux
+        
         df_h['Mois'] = df_h['Date'].dt.strftime('%Y-%m')
         df_h['JourSemaine'] = df_h['Date'].dt.dayofweek
         
-        # Nettoyage de la colonne Heure (ex: "07:00" -> 7)
+        # Nettoyage Heure
         def clean_hour(val):
             try:
                 s = str(val).strip()
-                return int(s[:2]) # Prend les 2 premiers caractères
+                # Si format "07:00 - 08:00", on prend "07"
+                # Si format "7", on prend 7
+                return int(s[:2].replace(':', ''))
             except:
                 return 0
                 
@@ -55,27 +62,35 @@ def load_data():
         df_h['HeureLabel'] = df_h['Heure'].astype(str) + "h"
 
         # --- NETTOYAGE FAMILLES ---
-        # Vos colonnes : FAMILLE, Période, CA TTC
-        df_d = df_d.rename(columns={
+        df_d.columns = df_d.columns.str.strip()
+        col_mapping_d = {
             'FAMILLE': 'Famille',
             'Période': 'Date',
             'CA TTC': 'CA'
-        })
-        df_d['Date'] = pd.to_datetime(df_d['Date'], dayfirst=True)
+        }
+        df_d = df_d.rename(columns={k: v for k, v in col_mapping_d.items() if k in df_d.columns})
+        
+        df_d['Date'] = pd.to_datetime(df_d['Date'], dayfirst=True, errors='coerce')
+        df_d = df_d.dropna(subset=['Date'])
         df_d['Mois'] = df_d['Date'].dt.strftime('%Y-%m')
 
         return df_h, df_d
 
     except Exception as e:
-        st.error(f"⚠️ Erreur de connexion au Google Sheet : {e}")
-        st.info("Assurez-vous d'avoir configuré les 'Secrets' dans Streamlit Cloud.")
-        st.stop()
+        st.error(f"⚠️ Erreur lors de la lecture des données : {e}")
+        st.info("Vérifiez : 1. Les noms des onglets (ANALYSE HORAIRE / ANALYSE FAMILLES). 2. Que le fichier est bien Public ou partagé.")
+        # Retourne des dataframes vides pour ne pas crasher toute l'app
+        return pd.DataFrame(), pd.DataFrame()
 
 df_hourly, df_daily = load_data()
 
 # =============================================================================
 # 3. INTERFACE & NAVIGATION
 # =============================================================================
+
+if df_hourly.empty:
+    st.warning("En attente de données valides...")
+    st.stop()
 
 with st.sidebar:
     st.title("🚀 Sébazac 360°")
@@ -241,3 +256,5 @@ elif page == "Staffing":
         st.plotly_chart(fig_heat, use_container_width=True)
     else:
         st.warning("Pas assez de données pour générer la matrice.")
+```
+```
