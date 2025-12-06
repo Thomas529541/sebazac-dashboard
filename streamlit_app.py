@@ -235,4 +235,3 @@ elif page == "Staffing":
     else:
         st.warning("Pas assez de données pour générer la matrice.")
 ```
-```
