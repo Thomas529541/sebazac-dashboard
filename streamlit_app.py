@@ -34,13 +34,13 @@ def load_data():
     # Remplacez les GID ci-dessous par les VRAIS GID de votre fichier.
     
     # EXEMPLE (À ADAPTER AVEC VOS VRAIS GID) :
-    gid_horaire = "1480957905" # Exemple, remplacez par le vrai ID de l'onglet HORAIRE
-    gid_famille = "2017923547" # Exemple, remplacez par le vrai ID de l'onglet FAMILLES
+    gid_horaire = "1426896984" # Exemple, remplacez par le vrai ID de l'onglet HORAIRE
+    gid_famille = "2063806742" # Exemple, remplacez par le vrai ID de l'onglet FAMILLES
     
     # Si vous ne trouvez pas les GID, mettez 0 pour tester le premier onglet.
     
-    url_horaire = f"https://docs.google.com/spreadsheets/d/1GzL2TZE7X2z7HaO3rgxBbPh8xZfoNw4OxNHBw8YtK5c/edit?gid=2017923547#gid=2017923547"
-    url_famille = f"https://docs.google.com/spreadsheets/d/1GzL2TZE7X2z7HaO3rgxBbPh8xZfoNw4OxNHBw8YtK5c/edit?gid=1480957905#gid=1480957905"
+    url_horaire = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid_horaire}"
+    url_famille = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid_famille}"
 
     try:
         # Lecture directe avec Pandas (plus fiable que st-connection pour les fichiers publics)
