@@ -9,11 +9,16 @@ st.set_page_config(page_title="Cockpit Commerce", layout="wide", page_icon="⚡"
 
 st.markdown("""
 <style>
-    /* 1. Remonter tout le contenu vers le haut */
+    /* 1. Masquer le menu hamburger et le footer par défaut de Streamlit */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;} /* Cache la barre blanche du haut */
+
+    /* 2. Ajuster les marges pour coller au haut de l'écran SANS être coupé */
     .block-container {
-        padding-top: 1rem !important;
+        padding-top: 1rem !important; /* On laisse un petit espace (1rem) pour respirer */
         padding-bottom: 2rem !important;
-        margin-top: 0rem !important;
+        max-width: 95% !important; /* Utilise plus de largeur sur l'écran */
     }
     
     /* Style KPI */
