@@ -6,7 +6,7 @@ import numpy as np
 from datetime import timedelta
 
 # --- CONFIGURATION PAGE & CSS ---
-st.set_page_config(page_title="Pilotage Commerce V4", layout="wide", page_icon="🎯")
+st.set_page_config(page_title="Pilotage Commerce V5", layout="wide", page_icon="🎯")
 
 st.markdown("""
 <style>
@@ -24,7 +24,7 @@ st.markdown("""
     .kpi-container {
         background-color: #262730; border-radius: 8px; padding: 15px;
         border-left: 5px solid #FF4B4B; margin-bottom: 10px;
-        text-align: center; /* CENTRAGE DEMANDÉ */
+        text-align: center;
     }
     .kpi-title { font-size: 14px; color: #bbb; font-weight: 500; }
     .kpi-value { font-size: 28px; font-weight: bold; color: white; margin: 5px 0; }
@@ -48,9 +48,9 @@ st.markdown("""
     .metric-val { font-size: 15px; font-weight: bold; color: white; margin: 2px 0; }
     .metric-delta { font-size: 10px; }
     
-    /* KPIS OPERATIONNELS (Focus Jour) - Plus lisibles */
+    /* KPIS OPERATIONNELS (Focus Jour) */
     .op-kpi-box {
-        background-color: #383838; /* Fond plus clair */
+        background-color: #383838;
         padding: 15px; border-radius: 8px; 
         margin-bottom: 10px; text-align: center;
         border: 1px solid #555;
@@ -71,7 +71,6 @@ COLOR_MAP = {
     "Tabac": "#607D8B", "Jeux": "#29B6F6", "Bar Brasserie": "#AB47BC",
     "Presse": "#FF7043", "Divers": "#8D6E63", "Monétique": "#FFCA28", "Autres": "#78909C"
 }
-def get_color(act_name): return COLOR_MAP.get(act_name, "#78909C")
 
 # --- 1. CHARGEMENT ROBUSTE ---
 @st.cache_data
@@ -129,7 +128,6 @@ st.sidebar.markdown("---")
 # PAGE 1 : SYNTHÈSE MENSUELLE
 # ==============================================================================
 if page == "🏠 Synthèse Mensuelle":
-    # FILTRES
     st.sidebar.header("Filtres Cockpit")
     annees = sorted(df_horaire['Date'].dt.year.unique(), reverse=True)
     annee_sel = st.sidebar.selectbox("Année", annees)
@@ -153,7 +151,7 @@ if page == "🏠 Synthèse Mensuelle":
 
     st.title(f"Cockpit : {noms_mois[mois_sel]} {annee_sel}")
     
-    # 1. KPIs GLOBAUX (Centrés)
+    # 1. KPIs GLOBAUX
     ca_c, cli_c = df_curr['CA TTC'].sum(), df_curr['Nombre de clients'].sum()
     pm_c = ca_c/cli_c if cli_c else 0
     ca_m1, cli_m1 = df_m1['CA TTC'].sum(), df_m1['Nombre de clients'].sum()
@@ -185,10 +183,9 @@ if page == "🏠 Synthèse Mensuelle":
     # 2. COLONNES : EQUILIBRE + CASCADE
     c_left, c_right = st.columns([1, 2])
     
-    # A. CARTES MATIN / SOIR (Nouvelle structure complète)
+    # A. CARTES MATIN / SOIR
     with c_left:
         st.subheader("⚖️ Équilibre Journée")
-        
         def get_moment_stats(df, moment):
             if df.empty: return 0, 0, 0
             df = df.copy()
@@ -201,12 +198,10 @@ if page == "🏠 Synthèse Mensuelle":
             ca_m, cli_m, pm_m = get_moment_stats(df_m1, mom)
             ca_n, cli_n, pm_n = get_moment_stats(df_n1, mom)
             
-            # Calcul Evos
             ev_ca_m, cl_ca_m, _ = calc_evo(ca, ca_m); ev_ca_n, cl_ca_n, _ = calc_evo(ca, ca_n)
             ev_cli_m, cl_cli_m, _ = calc_evo(cli, cli_m); ev_cli_n, cl_cli_n, _ = calc_evo(cli, cli_n)
             ev_pm_m, cl_pm_m, _ = calc_evo(pm, pm_m); ev_pm_n, cl_pm_n, _ = calc_evo(pm, pm_n)
 
-            # HTML Carte Complète
             st.markdown(f"""
             <div class="detail-card">
                 <div class="detail-header">
@@ -279,10 +274,8 @@ if page == "🏠 Synthèse Mensuelle":
 
     st.markdown("---")
 
-    # 3. HEATMAP AVEC FILTRES RESTITUÉS
+    # 3. HEATMAP
     st.subheader("🔥 Heatmap Hebdomadaire")
-    
-    # Boutons de filtres Heatmap
     c_h1, c_h2 = st.columns([2, 8])
     hm_kpi = c_h1.selectbox("Indicateur Heatmap", ["CA TTC", "Clients", "Panier"])
     hm_view = c_h2.selectbox("Type d'analyse", ["Valeur Moyenne", "Évolution vs M-1", "Évolution vs N-1"])
@@ -305,7 +298,6 @@ if page == "🏠 Synthèse Mensuelle":
 
         mat_curr = get_hm(df_curr, hm_kpi)
         
-        # Logique Valeur vs Evolution
         if "Évolution" in hm_view:
             df_ref = df_m1 if "M-1" in hm_view else df_n1
             if not df_ref.empty:
@@ -345,7 +337,6 @@ elif page == "📅 Focus Jour & Semaine":
     
     st.title("📅 Analyse Opérationnelle")
 
-    # Date calc
     if view_mode == "Journée":
         start_date = date_focus; end_date = date_focus
         lbl_per = f"Journée du {date_focus.strftime('%d/%m/%Y')}"
@@ -357,7 +348,6 @@ elif page == "📅 Focus Jour & Semaine":
     mask_f = (df_horaire['Date'] >= start_date) & (df_horaire['Date'] <= end_date)
     df_f = consolidate_registers(df_horaire[mask_f])
     
-    # Bench
     bench_start = start_date - timedelta(weeks=8)
     mask_b = (df_horaire['Date'] >= bench_start) & (df_horaire['Date'] < start_date)
     df_b_raw = consolidate_registers(df_horaire[mask_b])
@@ -371,7 +361,6 @@ elif page == "📅 Focus Jour & Semaine":
         df_b = df_b_raw; norm = 8
 
     if not df_f.empty:
-        # A. KPIS LISIBLES
         ca_f = df_f['CA TTC'].sum(); ca_b = df_b['CA TTC'].sum()/norm
         cli_f = df_f['Nombre de clients'].sum(); cli_b = df_b['Nombre de clients'].sum()/norm
         pm_f = ca_f/cli_f if cli_f else 0; pm_b = ca_b/cli_b if cli_b else 0
@@ -394,7 +383,6 @@ elif page == "📅 Focus Jour & Semaine":
         
         st.markdown("---")
         
-        # B. GRAPHIQUE CORRIGÉ (Valeurs, Pas de décimale, courbe lissée)
         if view_mode == "Journée":
             chart_d = df_f.groupby('Heure')['CA TTC'].sum().reset_index()
             chart_b = df_b.groupby('Heure')['CA TTC'].mean().reset_index()
@@ -413,14 +401,12 @@ elif page == "📅 Focus Jour & Semaine":
             x_col = 'D'
             
         fig = go.Figure()
-        # Courbe Jaune avec Valeurs
         fig.add_trace(go.Scatter(
             x=chart_d[x_col], y=chart_d['CA TTC'], mode='lines+markers+text', name='Actuel',
             line=dict(color='#FFD700', width=4),
             text=[f"{v:,.0f}".replace(",", " ") for v in chart_d['CA TTC']],
             textposition="top center", textfont=dict(color='white', size=13, weight='bold')
         ))
-        # Courbe Habitude (Juste la moyenne)
         fig.add_trace(go.Scatter(
             x=chart_b[x_col], y=chart_b['CA TTC'], mode='lines', name='Habitude',
             line=dict(color='#888', width=2, dash='dot')
@@ -428,7 +414,6 @@ elif page == "📅 Focus Jour & Semaine":
         fig.update_layout(title="Comparaison CA vs Habitude", height=400, hovermode="x unified")
         st.plotly_chart(fig, use_container_width=True)
         
-        # C. TABLEAU COMPLET
         st.subheader("Détail Chiffré")
         if view_mode == "Journée":
             t = df_f.groupby('Heure').agg(CA=('CA TTC','sum'), Cli=('Nombre de clients','sum')).reset_index()
@@ -437,13 +422,11 @@ elif page == "📅 Focus Jour & Semaine":
         else:
             t = df_f.groupby('Date').agg(CA=('CA TTC','sum'), Cli=('Nombre de clients','sum')).reset_index()
             t['Heure'] = t['Date'].dt.strftime('%d/%m')
-            # Pas de bench ligne par ligne en vue semaine (trop complexe à afficher)
             t['CA_B'] = 0; t['Cli_B'] = 0
 
         t['PM'] = t['CA']/t['Cli']; t['PM_B'] = t['CA_B']/t['Cli_B']
         t['Diff CA'] = t['CA'] - t['CA_B']; t['Diff Cli'] = t['Cli'] - t['Cli_B']; t['Diff PM'] = t['PM'] - t['PM_B']
         
-        # Affichage
         disp = pd.DataFrame()
         disp['Créneau'] = t['Heure']
         disp['CA'] = t['CA'].apply(lambda x: f"{x:,.0f} €".replace(","," "))
@@ -453,7 +436,6 @@ elif page == "📅 Focus Jour & Semaine":
         disp['Panier'] = t['PM'].apply(lambda x: f"{x:.2f} €")
         disp['Diff PM'] = t['Diff PM'].apply(lambda x: f"{x:+.2f} €") if view_mode=="Journée" else "-"
         
-        # Ligne TOTAL (Blanche et Gras)
         row_tot = {
             'Créneau': 'TOTAL', 
             'CA': f"{t['CA'].sum():,.0f} €".replace(","," "), 'Diff CA': "-",
@@ -503,7 +485,6 @@ elif page == "📈 Tendances & Familles":
         
         st.markdown("---")
         
-        # MIX ACTIVITÉS (2 GRAPHS: VALEUR + %)
         c_mix1, c_mix2 = st.columns(2)
         mask_act = (df_activite['Date'] > date_start) & (df_activite['Date'] <= date_end)
         df_act_12m = df_activite[mask_act].copy()
@@ -521,20 +502,17 @@ elif page == "📈 Tendances & Familles":
             fig2.update_layout(barnorm='percent')
             st.plotly_chart(fig2, use_container_width=True)
             
-    # --- FAMILLES TOP & FLOP (Design Clair) ---
     st.markdown("---")
     st.subheader("🔍 Performance Familles (Top 10)")
     
     if not df_famille.empty:
         last_m = df_famille['Date'].max().month; last_y = df_famille['Date'].max().year
-        # Curr
         mask_c = (df_famille['Date'].dt.month == last_m) & (df_famille['Date'].dt.year == last_y)
         f_curr = df_famille[mask_c].groupby('FAMILLE').agg({'CA TTC':'sum', 'Quantité':'sum'})
         f_curr['PM'] = f_curr['CA TTC']/f_curr['Quantité']
         
-        # N-1
         mask_p = (df_famille['Date'].dt.month == last_m) & (df_famille['Date'].dt.year == last_y - 1)
-        f_prev = df_famille[mask_prev].groupby('FAMILLE')['CA TTC'].sum() if not df_famille[mask_p].empty else pd.Series()
+        f_prev = df_famille[mask_p].groupby('FAMILLE')['CA TTC'].sum() if not df_famille[mask_p].empty else pd.Series(dtype=float)
         
         df_r = f_curr.copy().sort_values('CA TTC', ascending=False).head(10)
         df_r['CA N-1'] = f_prev
@@ -543,17 +521,14 @@ elif page == "📈 Tendances & Familles":
         cols = st.columns(4)
         for i, (fam, row) in enumerate(df_r.iterrows()):
             with cols[i%4]:
-                evo = row['Evo']; color = "pos" if evo>=0 else "neg"; sym = "▲" if evo>=0 else "▼"
+                evo = row['Evo']; cl = "pos" if evo>=0 else "neg"
                 st.markdown(f"""
-                <div class="detail-card" style="background-color:#2d2d2d;">
-                    <div class="detail-header" style="color:#FFD700; border-bottom:1px solid #555;">{fam}</div>
+                <div class="detail-card">
+                    <div class="detail-header"><span>{fam}</span></div>
                     <div class="detail-grid">
-                        <div><div class="metric-label">CA</div><div class="metric-val">{row['CA TTC']/1000:.1f}k€</div><div class="metric-delta {color}">{sym} {abs(evo):.0f}%</div></div>
-                        <div><div class="metric-label">Vol.</div><div class="metric-val">{row['Quantité']:.0f}</div><div class="metric-delta" style="color:#888;">N-1 -</div></div>
-                        <div><div class="metric-label">Prix</div><div class="metric-val">{row['PM']:.1f}€</div><div class="metric-delta" style="color:#888;">N-1 -</div></div>
+                        <div><div class="metric-label">CA</div><div class="metric-val">{row['CA TTC']/1000:.1f}k€</div><div class="metric-delta {cl}">{evo:+.0f}%</div></div>
+                        <div><div class="metric-label">Vol.</div><div class="metric-val">{row['Quantité']:.0f}</div></div>
+                        <div><div class="metric-label">Prix</div><div class="metric-val">{row['PM']:.1f}€</div></div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-                
-    else:
-        st.info("Données Familles non disponibles.")
