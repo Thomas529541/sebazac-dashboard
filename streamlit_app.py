@@ -6,7 +6,7 @@ import numpy as np
 from datetime import timedelta
 
 # --- CONFIGURATION PAGE & CSS ---
-st.set_page_config(page_title="Cockpit Commerce V2", layout="wide", page_icon="⚡")
+st.set_page_config(page_title="Pilotage Commerce V3", layout="wide", page_icon="🎯")
 
 st.markdown("""
 <style>
@@ -16,57 +16,60 @@ st.markdown("""
     header {visibility: hidden;}
     .block-container {
         padding-top: 1rem !important;
-        padding-bottom: 2rem !important;
+        padding-bottom: 3rem !important;
         margin-top: 0rem !important;
     }
     
-    /* KPI GLOBAL */
-    .kpi-box {
-        background-color: #262730; border-radius: 8px; padding: 10px;
-        text-align: center; border-left: 5px solid #FF4B4B;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 10px;
+    /* KPI GLOBAL STYLES */
+    .kpi-container {
+        background-color: #262730; border-radius: 8px; padding: 10px 15px;
+        border-left: 5px solid #FF4B4B; margin-bottom: 10px;
     }
-    .kpi-val { font-size: 24px; font-weight: bold; color: white; margin: 2px 0; }
-    .kpi-label { font-size: 13px; color: #aaaaaa; }
+    .kpi-title { font-size: 14px; color: #bbb; font-weight: 500; }
+    .kpi-value { font-size: 24px; font-weight: bold; color: white; margin: 2px 0; }
+    .kpi-sub { font-size: 13px; margin-top: 2px; }
     
-    /* CARTES DÉTAIL */
-    .act-card {
-        background-color: #1E1E1E; border-radius: 10px; padding: 12px;
-        border: 1px solid #333; margin-bottom: 15px;
-    }
-    .act-title { 
-        font-size: 16px; font-weight: bold; color: #FFD700; 
-        border-bottom: 1px solid #333; padding-bottom: 8px; margin-bottom: 10px;
-        display: flex; justify-content: space-between;
-    }
-    .act-share { font-size: 12px; color: #aaa; font-weight: normal; margin-top: 2px; }
-    .act-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; text-align: center; }
-    .act-metric { font-size: 11px; color: #888; text-transform: uppercase; margin-bottom: 2px; }
-    .act-val { font-size: 17px; font-weight: bold; color: #fff; margin-bottom: 4px; }
-    .act-delta { font-size: 11px; display: block; line-height: 1.2; }
+    /* TABLEAUX STYLISÉS */
+    .dataframe { font-size: 12px !important; }
     
-    /* ALERTE INTELLIGENTE */
-    .smart-alert {
-        background-color: #2b3e50; color: #e0e0e0; padding: 10px; border-radius: 8px;
-        border-left: 5px solid #FFD700; margin-bottom: 15px; font-size: 14px;
+    /* CARTES FAMILLES */
+    .fam-card {
+        background-color: #1E1E1E; border-radius: 8px; padding: 15px;
+        border: 1px solid #333; margin-bottom: 10px;
     }
-
-    /* COULEURS VARIATIONS */
-    .pos { color: #00FF00; }
-    .neg { color: #FF4444; }
+    .fam-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 8px; margin-bottom: 8px; }
+    .fam-name { font-size: 16px; font-weight: bold; color: #FFD700; }
+    .fam-stat-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+    .fam-label { font-size: 12px; color: #aaa; }
+    .fam-val { font-size: 14px; font-weight: bold; color: #fff; }
+    
+    /* COULEURS */
+    .pos { color: #00FF00; font-weight: bold; }
+    .neg { color: #FF4444; font-weight: bold; }
     .neu { color: #888888; }
 </style>
 """, unsafe_allow_html=True)
+
+# --- 0. PALETTE DE COULEURS FIXES (Pour stabilité visuelle) ---
+COLOR_MAP = {
+    "Tabac": "#607D8B",       # Gris Bleu (Neutre mais imposant)
+    "Jeux": "#29B6F6",        # Bleu clair (FDJ)
+    "Bar Brasserie": "#AB47BC", # Violet
+    "Presse": "#FF7043",      # Orange
+    "Divers": "#8D6E63",      # Marron
+    "Monétique": "#FFCA28",   # Jaune
+    "Autres": "#78909C"       # Gris
+}
+def get_color(act_name):
+    return COLOR_MAP.get(act_name, "#78909C")
 
 # --- 1. CHARGEMENT ROBUSTE ---
 @st.cache_data
 def load_data():
     try:
         fichier = 'donnees.xlsx'
-        # On charge les 3 onglets
         df_h = pd.read_excel(fichier, sheet_name='ANALYSE HORAIRE')
         df_a = pd.read_excel(fichier, sheet_name='Analyse Activités')
-        # On essaie de charger Familles, sinon dataframe vide
         try:
             df_f = pd.read_excel(fichier, sheet_name='ANALYSE FAMILLES')
         except:
@@ -77,7 +80,6 @@ def load_data():
                 return s.astype(str).str.replace('€', '').str.replace(' ', '').str.replace(',', '.').astype(float)
             return s
 
-        # Nettoyage HORAIRE
         cols_h = {'CA TTC': clean_curr, 'Nombre de clients': pd.to_numeric}
         for col, func in cols_h.items():
             if col in df_h.columns: df_h[col] = func(df_h[col])
@@ -85,7 +87,6 @@ def load_data():
             df_h['DateFull'] = pd.to_datetime(df_h['Période'], dayfirst=True)
             df_h['Date'] = df_h['DateFull'].dt.normalize()
 
-        # Nettoyage ACTIVITE
         cols_a = {'CA TTC': clean_curr, 'Quantité': pd.to_numeric}
         for col, func in cols_a.items():
             if col in df_a.columns: df_a[col] = func(df_a[col])
@@ -93,7 +94,6 @@ def load_data():
             df_a['DateFull'] = pd.to_datetime(df_a['Période'], dayfirst=True)
             df_a['Date'] = df_a['DateFull'].dt.normalize()
             
-        # Nettoyage FAMILLE
         if not df_f.empty:
             cols_f = {'CA TTC': clean_curr, 'Quantité': pd.to_numeric}
             for col, func in cols_f.items():
@@ -130,16 +130,15 @@ def fmt_val(val, unit=""):
 # ==============================================================================
 # MENU DE NAVIGATION
 # ==============================================================================
-st.sidebar.title("📱 Navigation")
-page = st.sidebar.radio("Aller vers :", ["🏠 Synthèse Mensuelle", "📅 Focus Jour & Semaine", "📈 Tendances & Familles"])
+st.sidebar.title("🎯 Pilotage")
+page = st.sidebar.radio("Navigation :", ["🏠 Synthèse Mensuelle", "📅 Focus Jour & Semaine", "📈 Tendances & Familles"])
 st.sidebar.markdown("---")
 
 # ==============================================================================
-# PAGE 1 : SYNTHÈSE MENSUELLE (COCKPIT)
+# PAGE 1 : SYNTHÈSE MENSUELLE
 # ==============================================================================
 if page == "🏠 Synthèse Mensuelle":
-    
-    # --- FILTRES ---
+    # FILTRES
     st.sidebar.header("Filtres Cockpit")
     annees = sorted(df_horaire['Date'].dt.year.unique(), reverse=True)
     annee_sel = st.sidebar.selectbox("Année", annees)
@@ -148,12 +147,10 @@ if page == "🏠 Synthèse Mensuelle":
     mois_sel = st.sidebar.selectbox("Mois", mois_dispo, format_func=lambda x: noms_mois[x])
     waterfall_comp = st.sidebar.radio("Cascade vs :", ["Mois Précédent (M-1)", "Année Précédente (N-1)"])
 
-    # --- DATA PREP ---
-    # Actuel
+    # DATA PREP (Code existant conservé pour la synthèse)
     df_curr = consolidate_registers(df_horaire[(df_horaire['Date'].dt.year == annee_sel) & (df_horaire['Date'].dt.month == mois_sel)])
     df_act_curr = df_activite[(df_activite['Date'].dt.year == annee_sel) & (df_activite['Date'].dt.month == mois_sel)]
     
-    # Comparatifs
     if mois_sel == 1: prev_m, prev_y_m = 12, annee_sel - 1
     else: prev_m, prev_y_m = mois_sel - 1, annee_sel
     
@@ -163,9 +160,9 @@ if page == "🏠 Synthèse Mensuelle":
     df_n1 = consolidate_registers(df_horaire[(df_horaire['Date'].dt.year == annee_sel - 1) & (df_horaire['Date'].dt.month == mois_sel)])
     df_act_n1 = df_activite[(df_activite['Date'].dt.year == annee_sel - 1) & (df_activite['Date'].dt.month == mois_sel)]
 
-    # --- KPI HEADER ---
     st.title(f"Cockpit : {noms_mois[mois_sel]} {annee_sel}")
     
+    # 3 KPIs GLOBAUX (Code existant)
     ca_c, cli_c = df_curr['CA TTC'].sum(), df_curr['Nombre de clients'].sum()
     pm_c = ca_c/cli_c if cli_c else 0
     ca_m1, cli_m1 = df_m1['CA TTC'].sum(), df_m1['Nombre de clients'].sum()
@@ -177,10 +174,10 @@ if page == "🏠 Synthèse Mensuelle":
         e_m, c_m, s_m = calc_evo(val, val_m1)
         e_n, c_n, s_n = calc_evo(val, val_n1)
         st.markdown(f"""
-        <div class="kpi-box">
-            <div class="kpi-label">{title}</div>
-            <div class="kpi-val">{fmt_val(val, unit)}</div>
-            <div class="kpi-delta">
+        <div class="kpi-container">
+            <div class="kpi-title">{title}</div>
+            <div class="kpi-value">{fmt_val(val, unit)}</div>
+            <div class="kpi-sub">
                 <span style="color:#aaa;">vs M-1:</span> <span class="{c_m}">{s_m}{abs(e_m):.1f}%</span> |
                 <span style="color:#aaa;">vs N-1:</span> <span class="{c_n}">{s_n}{abs(e_n):.1f}%</span>
             </div>
@@ -194,10 +191,8 @@ if page == "🏠 Synthèse Mensuelle":
 
     st.markdown("---")
 
-    # --- CORPS DE PAGE ---
+    # SECTION MATIN / SOIR & CASCADE
     c_left, c_right = st.columns([1, 2])
-
-    # GAUCHE : CARTES MATIN / SOIR
     with c_left:
         st.subheader("⚖️ Équilibre Journée")
         def get_moment_stats(df, moment):
@@ -218,23 +213,26 @@ if page == "🏠 Synthèse Mensuelle":
             share = (ca / ca_c * 100) if ca_c > 0 else 0
             ev_ca, cl_ca, _ = calc_evo(ca, ca_m)
             ev_ca_n, cl_ca_n, _ = calc_evo(ca, ca_n)
-            ev_cli, cl_cli, _ = calc_evo(cli, cli_m)
-            ev_cli_n, cl_cli_n, _ = calc_evo(cli, cli_n)
-            ev_pm, cl_pm, _ = calc_evo(pm, pm_m)
-            ev_pm_n, cl_pm_n, _ = calc_evo(pm, pm_n)
 
             st.markdown(f"""
-            <div class="act-card">
-                <div class="act-title"><span>{icon} {mom.upper()}</span><span class="act-share">{share:.0f}% du CA</span></div>
-                <div class="act-grid">
-                    <div><div class="act-metric">CA</div><div class="act-val">{ca/1000:.1f}k€</div><div class="act-delta {cl_ca}">M-1 {ev_ca:+.0f}%</div><div class="act-delta {cl_ca_n}">N-1 {ev_ca_n:+.0f}%</div></div>
-                    <div><div class="act-metric">Visites</div><div class="act-val">{cli/1000:.1f}k</div><div class="act-delta {cl_cli}"> {ev_cli:+.0f}%</div><div class="act-delta {cl_cli_n}"> {ev_cli_n:+.0f}%</div></div>
-                    <div><div class="act-metric">Panier</div><div class="act-val">{pm:.1f}€</div><div class="act-delta {cl_pm}"> {ev_pm:+.0f}%</div><div class="act-delta {cl_pm_n}"> {ev_pm_n:+.0f}%</div></div>
+            <div class="fam-card">
+                <div class="fam-header">
+                    <span class="fam-name">{icon} {mom}</span>
+                    <span style="color:#aaa; font-size:12px;">{share:.0f}% CA</span>
+                </div>
+                <div class="fam-stat-row">
+                    <span class="fam-label">CA</span>
+                    <span class="fam-val">{ca/1000:.1f}k€</span>
+                    <span class="fam-label {cl_ca}">M-1 {ev_ca:+.0f}%</span>
+                </div>
+                <div class="fam-stat-row">
+                    <span class="fam-label">N-1</span>
+                    <span class="fam-val"></span>
+                    <span class="fam-label {cl_ca_n}">{ev_ca_n:+.0f}%</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
-    # DROITE : CASCADE PONT CA
     with c_right:
         if "M-1" in waterfall_comp:
             lbl_prev = f"{noms_mois[prev_m]} {prev_y_m}"; df_act_prev = df_act_m1; start_val = ca_m1
@@ -252,7 +250,6 @@ if page == "🏠 Synthèse Mensuelle":
             df_b['Abs'] = df_b['Delta'].abs()
             df_b = df_b.sort_values('Abs', ascending=False)
             
-            # Top 6 + Autres
             if len(df_b) > 6:
                 main = df_b.head(6); other = df_b.iloc[6:]['Delta'].sum()
                 deltas = main['Delta'].to_dict(); deltas['Autres'] = other
@@ -264,140 +261,251 @@ if page == "🏠 Synthèse Mensuelle":
             y = [start_val] + list(deltas.values()) + [ca_c]
             text = [f"{start_val/1000:.0f}k"] + [f"{v/1000:+.1f}k" for v in deltas.values()] + [f"{ca_c/1000:.0f}k"]
             
-            # Scale
             run = [start_val]; cur = start_val
             for v in deltas.values(): cur+=v; run.append(cur)
             max_h = max(run + [ca_c]) * 1.15
 
-            # COULEUR TOTAL = #37474F (Bleu Gris Sombre)
             fig = go.Figure(go.Waterfall(
                 orientation="v", measure=measures, x=x, y=y, text=text, textposition="outside",
                 connector={"mode":"between", "line":{"width":1, "color":"#555"}},
                 decreasing={"marker":{"color":"#FF4444"}}, increasing={"marker":{"color":"#00C851"}}, 
-                totals={"marker":{"color":"#37474F"}} # <-- Couleur modifiée
+                totals={"marker":{"color":"#37474F"}}
             ))
-            fig.update_layout(height=450, showlegend=False, yaxis=dict(range=[0, max_h], title="CA TTC"), margin=dict(t=20))
+            fig.update_layout(height=400, showlegend=False, yaxis=dict(range=[0, max_h], title="CA TTC"), margin=dict(t=20))
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("Données manquantes.")
 
     st.markdown("---")
-
-    # --- HEATMAP INTELLIGENTE ---
-    st.subheader("🔥 Analyse Hebdomadaire & Phrases Clés")
-
+    st.subheader("🔥 Analyse Hebdomadaire")
+    
     if not df_curr.empty:
-        # GENERATION DE PHRASES (Logique simple)
-        df_curr['Day'] = df_curr['Date'].dt.day_name()
-        day_stats = df_curr.groupby('Day')['CA TTC'].sum().reindex(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']).fillna(0)
-        
-        best_day = day_stats.idxmax()
-        worst_day = day_stats[day_stats > 0].idxmin() if len(day_stats[day_stats>0]) > 0 else "N/A"
-        
-        # Traduction
-        fr_days_map = {'Monday':'Lundi', 'Tuesday':'Mardi', 'Wednesday':'Mercredi', 'Thursday':'Jeudi', 'Friday':'Vendredi', 'Saturday':'Samedi', 'Sunday':'Dimanche'}
-        
-        # Comparaison N-1
-        df_n1['Day'] = df_n1['Date'].dt.day_name()
-        day_stats_n1 = df_n1.groupby('Day')['CA TTC'].sum()
-        
-        # Phrase 1 : Pic
-        phrase_1 = f"🏆 Votre meilleure journée est le **{fr_days_map.get(best_day, best_day)}**."
-        
-        # Phrase 2 : Variation vs N-1 sur le meilleur jour
-        try:
-            val_n1 = day_stats_n1.get(best_day, 0)
-            val_c = day_stats.get(best_day, 0)
-            diff = ((val_c - val_n1)/val_n1)*100 if val_n1 > 0 else 0
-            tendance = "en hausse" if diff > 0 else "en baisse"
-            phrase_2 = f"Ce jour est **{tendance} de {diff:+.1f}%** par rapport à l'an dernier."
-        except:
-            phrase_2 = ""
-
-        st.markdown(f"""
-        <div class="smart-alert">
-            {phrase_1} {phrase_2} <br>
-            ❄️ Le jour le plus calme est le <b>{fr_days_map.get(worst_day, worst_day)}</b>.
-        </div>
-        """, unsafe_allow_html=True)
-
-        # HEATMAP
         days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         fr_days = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
         all_h = sorted(df_horaire['Heure'].unique())
 
-        def get_hm(df_source):
-            df_source['Day'] = df_source['Date'].dt.day_name()
-            g = df_source.groupby(['Day', 'Heure'])['CA TTC'].mean().reset_index()
-            return g.pivot(index='Day', columns='Heure', values='CA TTC').reindex(index=days, columns=all_h, fill_value=0).fillna(0)
-
-        mat_curr = get_hm(df_curr)
+        df_curr['Day'] = df_curr['Date'].dt.day_name()
+        hm_data = df_curr.groupby(['Day', 'Heure'])['CA TTC'].mean().reset_index()
+        mat_curr = hm_data.pivot(index='Day', columns='Heure', values='CA TTC').reindex(index=days, columns=all_h, fill_value=0).fillna(0)
+        
+        # Phrases
+        day_sums = mat_curr.sum(axis=1)
+        best = day_sums.idxmax(); worst = day_sums[day_sums>0].idxmin() if len(day_sums[day_sums>0]) > 0 else "N/A"
+        fr_map = dict(zip(days, fr_days))
+        
+        st.info(f"💡 Votre **{fr_map.get(best, best)}** est le jour le plus fort. Le **{fr_map.get(worst, worst)}** est le plus calme.")
+        
         fig = go.Figure(go.Heatmap(z=mat_curr.values, x=all_h, y=fr_days, colorscale="Blues", xgap=2, ygap=2))
         fig.update_layout(height=300, margin=dict(l=0, r=0, t=0, b=0), yaxis_autorange='reversed')
         st.plotly_chart(fig, use_container_width=True)
 
 
 # ==============================================================================
-# PAGE 2 : FOCUS JOUR / SEMAINE
+# PAGE 2 : FOCUS JOUR & SEMAINE (NOUVELLE LOGIQUE)
 # ==============================================================================
 elif page == "📅 Focus Jour & Semaine":
     st.title("📅 Analyse Opérationnelle")
     
-    # Sélecteur Date
+    # 1. Barre de contrôle
+    c_ctrl1, c_ctrl2 = st.columns([1, 2])
+    view_mode = c_ctrl1.radio("Vue :", ["Journée", "Semaine Complète"], horizontal=True)
+    
     min_date = df_horaire['Date'].min()
     max_date = df_horaire['Date'].max()
-    date_focus = st.sidebar.date_input("Choisir un jour", value=max_date, min_value=min_date, max_value=max_date)
+    date_focus = c_ctrl2.date_input("Sélectionner une date pivot", value=max_date, min_value=min_date, max_value=max_date)
     date_focus = pd.to_datetime(date_focus)
     
-    # Données du jour
-    df_day = consolidate_registers(df_horaire[df_horaire['Date'] == date_focus])
-    
-    if df_day.empty:
-        st.warning("Pas de données pour ce jour (Fermé ?)")
+    # 2. Détermination de la période
+    if view_mode == "Journée":
+        start_date = date_focus
+        end_date = date_focus
+        period_label = f"Journée du {date_focus.strftime('%d/%m/%Y')}"
+        group_col = 'Heure'
     else:
-        # Benchmark : Moyenne des mêmes jours sur 3 mois précédents
-        day_name = date_focus.day_name()
-        start_bench = date_focus - timedelta(days=90)
-        df_bench = df_horaire[(df_horaire['Date'] >= start_bench) & (df_horaire['Date'] < date_focus)]
-        df_bench['DayName'] = df_bench['Date'].dt.day_name()
-        df_bench = df_bench[df_bench['DayName'] == day_name]
-        df_bench = consolidate_registers(df_bench) # Important
+        # Trouver le lundi et dimanche de cette semaine
+        start_date = date_focus - timedelta(days=date_focus.weekday())
+        end_date = start_date + timedelta(days=6)
+        period_label = f"Semaine du {start_date.strftime('%d/%m')} au {end_date.strftime('%d/%m')}"
+        group_col = 'Date' # En vue semaine, on groupe par jour
         
-        # Comparaison KPIs
-        ca_d = df_day['CA TTC'].sum()
-        ca_b = df_bench.groupby('Date')['CA TTC'].sum().mean() # Moyenne des totaux journaliers
+    # 3. Filtrage Données
+    mask_focus = (df_horaire['Date'] >= start_date) & (df_horaire['Date'] <= end_date)
+    df_focus = consolidate_registers(df_horaire[mask_focus])
+    
+    # 4. Calcul Benchmark (Habitude sur les 8 dernières semaines mêmes jours)
+    # On prend une période large avant
+    bench_start = start_date - timedelta(weeks=8)
+    mask_bench = (df_horaire['Date'] >= bench_start) & (df_horaire['Date'] < start_date)
+    df_bench_raw = consolidate_registers(df_horaire[mask_bench])
+    
+    # On ne garde que les mêmes jours de la semaine (ex: que les lundis si vue jour, ou tout si vue semaine)
+    if view_mode == "Journée":
+        target_day = date_focus.day_name()
+        df_bench_raw['DayName'] = df_bench_raw['Date'].dt.day_name()
+        df_bench = df_bench_raw[df_bench_raw['DayName'] == target_day]
+        norm_factor = df_bench['Date'].nunique() # Nombre de lundis trouvés
+    else:
+        # Pour la semaine, benchmark = moyenne hebdomadaire sur 8 semaines
+        df_bench = df_bench_raw
+        norm_factor = 8 # On compare à une moyenne sur 8 semaines
         
-        delta_d = ((ca_d - ca_b)/ca_b)*100 if ca_b > 0 else 0
-        color = "green" if delta_d > 0 else "red"
+    if df_focus.empty:
+        st.warning(f"Pas de données pour {period_label}")
+    else:
+        # --- A. 3 LIGNES DE KPIS ---
+        # Focus
+        ca_f = df_focus['CA TTC'].sum()
+        cli_f = df_focus['Nombre de clients'].sum()
+        pm_f = ca_f / cli_f if cli_f else 0
         
-        st.markdown(f"### Performance du {date_focus.strftime('%d/%m/%Y')} ({day_name})")
-        st.markdown(f"CA du jour : **{ca_d:,.0f} €** vs Moyenne habitude : **{ca_b:,.0f} €** (<span style='color:{color}'>{delta_d:+.1f}%</span>)", unsafe_allow_html=True)
+        # Bench (Moyenne)
+        ca_b_total = df_bench['CA TTC'].sum()
+        cli_b_total = df_bench['Nombre de clients'].sum()
         
-        # Graphique Comparatif Horaire
-        hourly_day = df_day.groupby('Heure')['CA TTC'].sum()
-        hourly_bench = df_bench.groupby('Heure')['CA TTC'].mean()
+        # Si norm_factor est 0, évite division par zero
+        norm_factor = max(1, norm_factor)
         
+        ca_b_avg = ca_b_total / norm_factor
+        cli_b_avg = cli_b_total / norm_factor
+        pm_b_avg = ca_b_avg / cli_b_avg if cli_b_avg else 0
+        
+        # Affichage
+        st.subheader(f"Performance : {period_label}")
+        
+        c1, c2, c3 = st.columns(3)
+        
+        def kpi_focus_row(col, title, val_f, val_b, unit=""):
+            diff = val_f - val_b
+            pct = (diff / val_b * 100) if val_b > 0 else 0
+            color = "green" if diff >= 0 else "red"
+            sym = "+" if diff >= 0 else ""
+            col.markdown(f"""
+            <div style="background:#262730; padding:10px; border-radius:5px; border-left:4px solid {color}; margin-bottom:5px;">
+                <div style="color:#aaa; font-size:12px;">{title}</div>
+                <div style="font-size:20px; font-weight:bold;">{fmt_val(val_f, unit)}</div>
+                <div style="font-size:12px; color:{color};">Habitude : {fmt_val(val_b, unit)} ({sym}{pct:.1f}%)</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        kpi_focus_row(c1, "Chiffre d'Affaires", ca_f, ca_b_avg, "€")
+        kpi_focus_row(c2, "Fréquentation", cli_f, cli_b_avg, "")
+        kpi_focus_row(c3, "Panier Moyen", pm_f, pm_b_avg, "PM")
+        
+        st.markdown("---")
+        
+        # --- B. GRAPHIQUE CHIFFRÉ ---
+        # Prép données graph
+        if view_mode == "Journée":
+            # Par Heure
+            chart_data = df_focus.groupby('Heure')['CA TTC'].sum().reset_index()
+            chart_bench = df_bench.groupby('Heure')['CA TTC'].mean().reset_index()
+            x_col = 'Heure'
+        else:
+            # Par Jour (Lundi, Mardi...)
+            df_focus['Day'] = df_focus['Date'].dt.day_name()
+            # Pour trier Lundi -> Dimanche
+            days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+            fr_days = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
+            df_focus['Day'] = pd.Categorical(df_focus['Day'], categories=days_order, ordered=True)
+            chart_data = df_focus.groupby('Day')['CA TTC'].sum().reset_index().sort_values('Day')
+            chart_data['Day'] = chart_data['Day'].map(dict(zip(days_order, fr_days)))
+            
+            # Bench Semaine
+            df_bench['Day'] = df_bench['Date'].dt.day_name()
+            chart_bench = df_bench.groupby('Day')['CA TTC'].sum() / norm_factor # Moyenne par jour
+            chart_bench = chart_bench.reindex(days_order).reset_index()
+            chart_bench['Day'] = chart_bench['Day'].map(dict(zip(days_order, fr_days)))
+            x_col = 'Day'
+            
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=hourly_day.index, y=hourly_day.values, name="Ce jour", line=dict(color='#FFD700', width=4)))
-        fig.add_trace(go.Scatter(x=hourly_bench.index, y=hourly_bench.values, name="Moyenne habitude", line=dict(color='gray', width=2, dash='dot')))
-        fig.update_layout(title="Courbe Horaire vs Habitude", height=400, hovermode="x unified")
+        # Courbe Principale (Focus) AVEC TEXTE
+        fig.add_trace(go.Scatter(
+            x=chart_data[x_col], y=chart_data['CA TTC'], 
+            mode='lines+markers+text', # AJOUT TEXTE
+            name='Sélection',
+            line=dict(color='#FFD700', width=4),
+            text=[f"{v:.0f}" for v in chart_data['CA TTC']], # VALEURS SANS DÉCIMALES
+            textposition="top center",
+            textfont=dict(color='white', size=12)
+        ))
+        # Courbe Habitude
+        fig.add_trace(go.Scatter(
+            x=chart_bench[x_col], y=chart_bench['CA TTC'], 
+            mode='lines',
+            name='Moyenne Habitude',
+            line=dict(color='gray', width=2, dash='dot')
+        ))
+        fig.update_layout(title="Évolution CA vs Habitude", height=400, hovermode="x unified", yaxis=dict(showgrid=True, gridcolor='#333'))
         st.plotly_chart(fig, use_container_width=True)
         
-        # Mix Activité du jour
-        df_act_day = df_activite[df_activite['Date'] == date_focus]
-        if not df_act_day.empty:
-            top_act = df_act_day.groupby('ACTIVITE')['CA TTC'].sum().sort_values(ascending=False).head(5)
-            st.subheader("Top Activités du Jour")
-            st.dataframe(top_act.to_frame().style.format("{:.2f} €"))
+        # --- C. TABLEAU DÉTAILLÉ AVEC TOTAL ---
+        st.subheader("Détail Chiffré")
+        
+        # Construction du tableau de données
+        if view_mode == "Journée":
+            # Group by Heure
+            tbl = df_focus.groupby('Heure').agg(
+                CA=('CA TTC', 'sum'),
+                Clients=('Nombre de clients', 'sum')
+            ).reset_index()
+            # Bench join
+            bench_tbl = df_bench.groupby('Heure').agg(
+                CA_B=('CA TTC', 'mean')
+            ).reset_index()
+            tbl = tbl.merge(bench_tbl, on='Heure', how='left')
+        else:
+            # Group by Date/Day
+            tbl = df_focus.groupby('Date').agg(
+                CA=('CA TTC', 'sum'),
+                Clients=('Nombre de clients', 'sum')
+            ).reset_index()
+            tbl['Jour'] = tbl['Date'].dt.day_name().map(dict(zip(days_order, fr_days)))
+            # Bench join (plus complexe par jour, on simplifie pour l'affichage tableau Focus uniquement)
+            # On affiche juste les données réelles
+            tbl['Heure'] = tbl['Jour'] # Hack pour affichage uniforme colonne 1
+            
+        # Calculs colonnes
+        tbl['Panier'] = tbl['CA'] / tbl['Clients']
+        if 'CA_B' in tbl.columns:
+            tbl['Diff vs Hab.'] = tbl['CA'] - tbl['CA_B']
+        else:
+            tbl['Diff vs Hab.'] = 0 # Pas de diff ligne par ligne en vue semaine (compliqué à mapper)
+            
+        # Mise en forme
+        tbl_display = pd.DataFrame()
+        tbl_display['Créneau'] = tbl['Heure'] if view_mode=="Journée" else tbl['Jour']
+        tbl_display['CA TTC'] = tbl['CA'].apply(lambda x: f"{x:.0f} €")
+        tbl_display['Fréquentation'] = tbl['Clients'].apply(lambda x: f"{x:.0f}")
+        tbl_display['Panier Moyen'] = tbl['Panier'].apply(lambda x: f"{x:.2f} €")
+        if view_mode == "Journée":
+            tbl_display['Diff vs Hab.'] = tbl['Diff vs Hab.'].apply(lambda x: f"{x:+.0f} €")
+
+        # LIGNE TOTAL
+        total_row = {
+            'Créneau': 'TOTAL',
+            'CA TTC': f"{tbl['CA'].sum():.0f} €",
+            'Fréquentation': f"{tbl['Clients'].sum():.0f}",
+            'Panier Moyen': f"{tbl['CA'].sum()/tbl['Clients'].sum():.2f} €",
+            'Diff vs Hab.': ""
+        }
+        tbl_display = pd.concat([tbl_display, pd.DataFrame([total_row])], ignore_index=True)
+        
+        # Style table (gras pour total)
+        def highlight_total(row):
+            if row['Créneau'] == 'TOTAL':
+                return ['background-color: #333; font-weight: bold']*len(row)
+            return ['']*len(row)
+
+        st.dataframe(tbl_display.style.apply(highlight_total, axis=1), use_container_width=True)
 
 
 # ==============================================================================
-# PAGE 3 : TENDANCES & FAMILLES
+# PAGE 3 : TENDANCES & FAMILLES (REFONTE)
 # ==============================================================================
 elif page == "📈 Tendances & Familles":
-    st.title("📈 Tendances Long Terme & Familles")
+    st.title("📈 Tendances & Familles")
     
-    # Filtre Fin de période
+    # Filtre
     date_end = st.sidebar.date_input("Fin de période", value=df_horaire['Date'].max())
     date_end = pd.to_datetime(date_end)
     date_start = date_end - pd.DateOffset(months=12)
@@ -407,84 +515,84 @@ elif page == "📈 Tendances & Familles":
     df_12m = consolidate_registers(df_horaire[mask_12m])
     
     if not df_12m.empty:
-        # Agrégation Mensuelle
         df_12m['Mois'] = df_12m['Date'].dt.to_period('M').astype(str)
         monthly = df_12m.groupby('Mois').agg({'CA TTC':'sum', 'Nombre de clients':'sum'}).reset_index()
         monthly['Panier'] = monthly['CA TTC'] / monthly['Nombre de clients']
         
-        st.subheader("Historique 12 Mois Glissants")
+        st.subheader("Historique 12 Mois (Avec Moyenne)")
         
-        # 3 Graphiques Lignes
+        # 3 GRAPHIQUES AVEC VALEURS + MOYENNE
         c1, c2, c3 = st.columns(3)
-        with c1:
-            fig = px.line(monthly, x='Mois', y='CA TTC', title="Chiffre d'Affaires", markers=True)
-            fig.update_traces(line_color='#29B6F6')
-            st.plotly_chart(fig, use_container_width=True)
-        with c2:
-            fig = px.line(monthly, x='Mois', y='Nombre de clients', title="Fréquentation", markers=True)
-            fig.update_traces(line_color='#66BB6A')
-            st.plotly_chart(fig, use_container_width=True)
-        with c3:
-            fig = px.line(monthly, x='Mois', y='Panier', title="Panier Moyen", markers=True)
-            fig.update_traces(line_color='#FF7043')
-            st.plotly_chart(fig, use_container_width=True)
+        
+        def plot_trend(col, title, y_col, color):
+            avg_val = monthly[y_col].mean()
+            fig = px.line(monthly, x='Mois', y=y_col, title=title, markers=True, text=y_col)
+            fig.update_traces(line_color=color, textposition="top center", texttemplate='%{text:.0f}')
+            # Ligne moyenne
+            fig.add_hline(y=avg_val, line_dash="dot", line_color="white", annotation_text="Moy", annotation_position="bottom right")
+            col.plotly_chart(fig, use_container_width=True)
             
-        # Stacked Area Activités
-        st.subheader("Evolution du Mix Activités")
+        plot_trend(c1, "Chiffre d'Affaires", 'CA TTC', '#29B6F6')
+        plot_trend(c2, "Fréquentation", 'Nombre de clients', '#66BB6A')
+        plot_trend(c3, "Panier Moyen", 'Panier', '#FF7043')
+            
+        # MIX ACTIVITÉS -> BARRES EMPILÉES (Plus lisible que Area)
+        st.subheader("Évolution du Mix Activités (Lisible)")
         mask_act_12m = (df_activite['Date'] > date_start) & (df_activite['Date'] <= date_end)
         df_act_12m = df_activite[mask_act_12m].copy()
         df_act_12m['Mois'] = df_act_12m['Date'].dt.to_period('M').astype(str)
         monthly_act = df_act_12m.groupby(['Mois', 'ACTIVITE'])['CA TTC'].sum().reset_index()
         
-        fig = px.area(monthly_act, x='Mois', y='CA TTC', color='ACTIVITE', title="Poids des Activités (Cumulé)")
+        # Assignation couleurs fixes
+        fig = px.bar(monthly_act, x='Mois', y='CA TTC', color='ACTIVITE', title="Composition du CA par Mois",
+                     color_discrete_map=COLOR_MAP, text_auto='.2s') # text_auto pour valeurs
+        fig.update_layout(barmode='stack')
         st.plotly_chart(fig, use_container_width=True)
         
-    # --- FOCUS FAMILLES (Option B) ---
+    # --- FAMILLES : MODE CONCRET ---
     st.markdown("---")
-    st.subheader("🔍 Analyse des Familles (Top 5)")
+    st.subheader("🔍 Analyse Familles : Top & Flop (Concret)")
     
     if not df_famille.empty:
-        # Comme on n'a pas forcément le lien Activité <-> Famille dans le fichier Famille,
-        # On propose un filtrage par texte ou global
-        search = st.text_input("Filtrer par nom de famille (ex: Marlboro, Loto...) - Laisser vide pour Top Global")
+        # Période courante vs N-1
+        last_month = df_famille['Date'].max().month
+        last_year = df_famille['Date'].max().year
         
-        # Filtrer sur le mois sélectionné dans la sidebar (pour cohérence) ou dernier mois dispo
-        # On va utiliser le mois sélectionné dans le cockpit par défaut si possible, sinon dernier mois
-        # Simplification : On prend les données du dernier mois complet dispo dans df_famille
-        last_month_fam = df_famille['Date'].max().month
-        last_year_fam = df_famille['Date'].max().year
+        mask_curr = (df_famille['Date'].dt.month == last_month) & (df_famille['Date'].dt.year == last_year)
+        mask_prev = (df_famille['Date'].dt.month == last_month) & (df_famille['Date'].dt.year == last_year - 1)
         
-        mask_fam_month = (df_famille['Date'].dt.month == last_month_fam) & (df_famille['Date'].dt.year == last_year_fam)
-        df_fam_curr = df_famille[mask_fam_month]
+        fam_curr = df_famille[mask_curr].groupby('FAMILLE')['CA TTC'].sum()
+        fam_prev = df_famille[mask_prev].groupby('FAMILLE')['CA TTC'].sum()
         
-        if search:
-            df_fam_curr = df_fam_curr[df_fam_curr['FAMILLE'].str.contains(search, case=False, na=False)]
-            
-        # Top 5
-        top_fam = df_fam_curr.groupby('FAMILLE')['CA TTC'].sum().sort_values(ascending=False).head(5)
+        # Merge
+        df_comp = pd.DataFrame({'CA N': fam_curr, 'CA N-1': fam_prev}).fillna(0)
+        df_comp['Diff'] = df_comp['CA N'] - df_comp['CA N-1']
+        df_comp['Evo %'] = (df_comp['Diff'] / df_comp['CA N-1'] * 100).replace([np.inf, -np.inf], 0).fillna(0)
         
-        c_fam1, c_fam2 = st.columns([1, 2])
+        # Tri par CA N décroissant
+        df_comp = df_comp.sort_values('CA N', ascending=False).head(10) # TOP 10
         
-        with c_fam1:
-            st.markdown(f"**Top 5 Familles ({last_month_fam}/{last_year_fam})**")
-            st.dataframe(top_fam)
-            
-        with c_fam2:
-            st.markdown("**Tendances 12 mois (Top 5)**")
-            # Pour chaque famille du top 5, on trace une sparkline
-            for fam_name in top_fam.index:
-                # Get history
-                mask_fam_hist = (df_famille['FAMILLE'] == fam_name) & (df_famille['Date'] > date_start)
-                hist_data = df_famille[mask_fam_hist].groupby(df_famille['Date'].dt.to_period('M'))['CA TTC'].sum()
+        # AFFICHAGE CARTE PAR CARTE
+        cols = st.columns(4)
+        for idx, (fam, row) in enumerate(df_comp.iterrows()):
+            with cols[idx % 4]:
+                evo = row['Evo %']
+                color_class = "pos" if evo > 0 else "neg"
+                sym = "▲" if evo > 0 else "▼"
                 
-                # Mini chart
-                fig = px.line(x=hist_data.index.astype(str), y=hist_data.values)
-                fig.update_layout(height=50, margin=dict(l=0,r=0,t=0,b=0), xaxis_visible=False, yaxis_visible=False, showlegend=False)
-                fig.update_traces(line_color='#FFD700', line_width=2)
+                # Sparkline simplifiée (tendance visuelle)
+                # On regarde juste si ça monte ou descend globalement
+                trend_color = "#00FF00" if evo > 0 else "#FF4444"
                 
-                col_a, col_b = st.columns([1, 3])
-                col_a.write(f"**{fam_name}**")
-                col_b.plotly_chart(fig, use_container_width=True)
-
+                st.markdown(f"""
+                <div class="fam-card" style="border-left: 4px solid {trend_color}">
+                    <div style="font-weight:bold; font-size:14px; margin-bottom:5px; height:40px; overflow:hidden;">{fam}</div>
+                    <div style="font-size:20px; font-weight:bold;">{row['CA N']/1000:.1f} k€</div>
+                    <div class="{color_class}" style="font-size:14px; margin-top:5px;">
+                        {sym} {abs(evo):.1f}% <span style="color:#aaa; font-size:11px;">vs N-1</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
     else:
-        st.info("Pas de données Familles détectées (Onglet 'ANALYSE FAMILLES' vide ou absent).")
+        st.info("Données Familles non disponibles.")
