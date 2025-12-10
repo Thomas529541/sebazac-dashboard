@@ -401,11 +401,13 @@ elif page == "📅 Focus Jour & Semaine":
             x_col = 'D'
             
         fig = go.Figure()
+        # Courbe Jaune (Correctif: Suppression color='white' pour compatibilité Light Mode)
         fig.add_trace(go.Scatter(
             x=chart_d[x_col], y=chart_d['CA TTC'], mode='lines+markers+text', name='Actuel',
             line=dict(color='#FFD700', width=4),
             text=[f"{v:,.0f}".replace(",", " ") for v in chart_d['CA TTC']],
-            textposition="top center", textfont=dict(color='white', size=13, weight='bold')
+            textposition="top center", 
+            textfont=dict(size=13, weight='bold') # On laisse Plotly choisir la couleur (Noir/Blanc)
         ))
         fig.add_trace(go.Scatter(
             x=chart_b[x_col], y=chart_b['CA TTC'], mode='lines', name='Habitude',
@@ -498,15 +500,20 @@ elif page == "📈 Tendances & Familles":
             
         with c_mix2:
             st.caption("Poids (%)")
-            fig2 = px.bar(m_act, x='Mois', y='CA TTC', color='ACTIVITE', color_discrete_map=COLOR_MAP)
-            fig2.update_layout(barnorm='percent')
+            # Calcul du % manuel pour affichage propre
+            m_act['Total'] = m_act.groupby('Mois')['CA TTC'].transform('sum')
+            m_act['Pct'] = (m_act['CA TTC'] / m_act['Total'] * 100)
+            
+            fig2 = px.bar(m_act, x='Mois', y='Pct', color='ACTIVITE', color_discrete_map=COLOR_MAP, text_auto='.0f')
             st.plotly_chart(fig2, use_container_width=True)
             
     st.markdown("---")
     st.subheader("🔍 Performance Familles (Top 10)")
     
     if not df_famille.empty:
-        last_m = df_famille['Date'].max().month; last_y = df_famille['Date'].max().year
+        # CORRECTIF: Utilisation de la date sélectionnée (date_end) et non du max
+        last_m = date_end.month; last_y = date_end.year
+        
         mask_c = (df_famille['Date'].dt.month == last_m) & (df_famille['Date'].dt.year == last_y)
         f_curr = df_famille[mask_c].groupby('FAMILLE').agg({'CA TTC':'sum', 'Quantité':'sum'})
         f_curr['PM'] = f_curr['CA TTC']/f_curr['Quantité']
@@ -521,14 +528,17 @@ elif page == "📈 Tendances & Familles":
         cols = st.columns(4)
         for i, (fam, row) in enumerate(df_r.iterrows()):
             with cols[i%4]:
-                evo = row['Evo']; cl = "pos" if evo>=0 else "neg"
+                evo = row['Evo']; cl = "pos" if evo>=0 else "neg"; sym = "▲" if evo>=0 else "▼"
                 st.markdown(f"""
                 <div class="detail-card">
                     <div class="detail-header"><span>{fam}</span></div>
                     <div class="detail-grid">
-                        <div><div class="metric-label">CA</div><div class="metric-val">{row['CA TTC']/1000:.1f}k€</div><div class="metric-delta {cl}">{evo:+.0f}%</div></div>
+                        <div><div class="metric-label">CA</div><div class="metric-val">{row['CA TTC']/1000:.1f}k€</div><div class="metric-delta {cl}">{sym} {abs(evo):.0f}%</div></div>
                         <div><div class="metric-label">Vol.</div><div class="metric-val">{row['Quantité']:.0f}</div></div>
                         <div><div class="metric-label">Prix</div><div class="metric-val">{row['PM']:.1f}€</div></div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
+                
+    else:
+        st.info("Données Familles non disponibles.")
