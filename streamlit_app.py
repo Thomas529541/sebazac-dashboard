@@ -6,7 +6,7 @@ import numpy as np
 from datetime import timedelta
 
 # --- CONFIGURATION PAGE & CSS ---
-st.set_page_config(page_title="Pilotage Commerce V6", layout="wide", page_icon="🎯")
+st.set_page_config(page_title="Pilotage Commerce V7", layout="wide", page_icon="🎯")
 
 st.markdown("""
 <style>
@@ -30,7 +30,7 @@ st.markdown("""
     .kpi-value { font-size: 28px; font-weight: bold; color: white; margin: 5px 0; }
     .kpi-sub { font-size: 13px; margin-top: 5px; display: flex; justify-content: center; gap: 15px; }
     
-    /* CARTES DÉTAILLÉES (Matin/Soir & Familles) */
+    /* CARTES DÉTAILLÉES */
     .detail-card {
         background-color: #1E1E1E; border-radius: 8px; padding: 12px;
         border: 1px solid #333; margin-bottom: 10px;
@@ -48,12 +48,17 @@ st.markdown("""
     .metric-val { font-size: 15px; font-weight: bold; color: white; margin: 2px 0; }
     .metric-delta { font-size: 10px; }
     
-    /* KPIS OPERATIONNELS (Focus Jour) */
+    /* PHRASES INTELLIGENTES (HEATMAP) */
+    .smart-alert {
+        background-color: #2b3e50; color: #e0e0e0; padding: 15px; border-radius: 8px;
+        border-left: 5px solid #FFD700; margin-bottom: 15px; font-size: 15px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    
+    /* KPIS OPERATIONNELS */
     .op-kpi-box {
-        background-color: #383838;
-        padding: 15px; border-radius: 8px; 
-        margin-bottom: 10px; text-align: center;
-        border: 1px solid #555;
+        background-color: #383838; padding: 15px; border-radius: 8px; 
+        margin-bottom: 10px; text-align: center; border: 1px solid #555;
     }
     .op-kpi-title { color: #ddd; font-size: 14px; margin-bottom: 5px; }
     .op-kpi-val { color: #fff; font-size: 24px; font-weight: bold; }
@@ -183,7 +188,6 @@ if page == "🏠 Synthèse Mensuelle":
     # 2. COLONNES : EQUILIBRE + CASCADE
     c_left, c_right = st.columns([1, 2])
     
-    # A. CARTES MATIN / SOIR
     with c_left:
         st.subheader("⚖️ Équilibre Journée")
         def get_moment_stats(df, moment):
@@ -209,29 +213,13 @@ if page == "🏠 Synthèse Mensuelle":
                     <span style="font-size:12px; font-weight:normal; color:#aaa;">{(ca/ca_c*100 if ca_c>0 else 0):.0f}% CA</span>
                 </div>
                 <div class="detail-grid">
-                    <div>
-                        <div class="metric-label">CA</div>
-                        <div class="metric-val">{ca/1000:.1f}k€</div>
-                        <div class="metric-delta {cl_ca_m}">M-1 {ev_ca_m:+.0f}%</div>
-                        <div class="metric-delta {cl_ca_n}">N-1 {ev_ca_n:+.0f}%</div>
-                    </div>
-                    <div>
-                        <div class="metric-label">Freq.</div>
-                        <div class="metric-val">{cli/1000:.1f}k</div>
-                        <div class="metric-delta {cl_cli_m}">{ev_cli_m:+.0f}%</div>
-                        <div class="metric-delta {cl_cli_n}">{ev_cli_n:+.0f}%</div>
-                    </div>
-                    <div>
-                        <div class="metric-label">Panier</div>
-                        <div class="metric-val">{pm:.1f}€</div>
-                        <div class="metric-delta {cl_pm_m}">{ev_pm_m:+.0f}%</div>
-                        <div class="metric-delta {cl_pm_n}">{ev_pm_n:+.0f}%</div>
-                    </div>
+                    <div><div class="metric-label">CA</div><div class="metric-val">{ca/1000:.1f}k€</div><div class="metric-delta {cl_ca_m}">M-1 {ev_ca_m:+.0f}%</div><div class="metric-delta {cl_ca_n}">N-1 {ev_ca_n:+.0f}%</div></div>
+                    <div><div class="metric-label">Freq.</div><div class="metric-val">{cli/1000:.1f}k</div><div class="metric-delta {cl_cli_m}">{ev_cli_m:+.0f}%</div><div class="metric-delta {cl_cli_n}">{ev_cli_n:+.0f}%</div></div>
+                    <div><div class="metric-label">Panier</div><div class="metric-val">{pm:.1f}€</div><div class="metric-delta {cl_pm_m}">{ev_pm_m:+.0f}%</div><div class="metric-delta {cl_pm_n}">{ev_pm_n:+.0f}%</div></div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
-    # B. CASCADE
     with c_right:
         if "M-1" in waterfall_comp: lbl_prev = f"{noms_mois[prev_m]}"; df_prev = df_act_m1; start_val = ca_m1
         else: lbl_prev = f"{noms_mois[mois_sel]} {annee_sel-1}"; df_prev = df_act_n1; start_val = ca_n1
@@ -249,8 +237,7 @@ if page == "🏠 Synthèse Mensuelle":
             if len(df_b) > 6:
                 main = df_b.head(6); other = df_b.iloc[6:]['Delta'].sum()
                 deltas = main['Delta'].to_dict(); deltas['Autres'] = other
-            else:
-                deltas = df_b['Delta'].to_dict()
+            else: deltas = df_b['Delta'].to_dict()
 
             measures = ["absolute"] + ["relative"] * len(deltas) + ["absolute"]
             x = [lbl_prev] + list(deltas.keys()) + ["Actuel"]
@@ -269,13 +256,43 @@ if page == "🏠 Synthèse Mensuelle":
             ))
             fig.update_layout(height=400, showlegend=False, yaxis=dict(range=[0, max_h], title="CA TTC"), margin=dict(t=20))
             st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("Données manquantes.")
+        else: st.warning("Données manquantes.")
 
     st.markdown("---")
 
-    # 3. HEATMAP
+    # 3. HEATMAP + PHRASES INTELLIGENTES
     st.subheader("🔥 Heatmap Hebdomadaire")
+    
+    # --- BLOC PHRASES ---
+    if not df_curr.empty:
+        df_curr['Day'] = df_curr['Date'].dt.day_name()
+        d_stats = df_curr.groupby('Day')['CA TTC'].sum()
+        
+        # Mapping FR
+        fr = {'Monday':'Lundi','Tuesday':'Mardi','Wednesday':'Mercredi','Thursday':'Jeudi','Friday':'Vendredi','Saturday':'Samedi','Sunday':'Dimanche'}
+        
+        if not d_stats.empty:
+            best = d_stats.idxmax()
+            worst = d_stats.idxmin()
+            
+            # Evo Best day vs N-1
+            df_n1['Day'] = df_n1['Date'].dt.day_name()
+            n1_stats = df_n1.groupby('Day')['CA TTC'].sum()
+            val_c = d_stats.get(best, 0); val_n = n1_stats.get(best, 0)
+            
+            diff_txt = ""
+            if val_n > 0:
+                diff = ((val_c - val_n)/val_n)*100
+                diff_txt = f"(Evo N-1 : {diff:+.1f}%)"
+
+            st.markdown(f"""
+            <div class="smart-alert">
+                🔥 <b>Top Performance :</b> Le <b>{fr.get(best, best)}</b> est votre meilleure journée {diff_txt}.<br>
+                ❄️ <b>Creux :</b> Le <b>{fr.get(worst, worst)}</b> est la journée la plus calme.
+            </div>
+            """, unsafe_allow_html=True)
+    # --------------------
+
     c_h1, c_h2 = st.columns([2, 8])
     hm_kpi = c_h1.selectbox("Indicateur Heatmap", ["CA TTC", "Clients", "Panier"])
     hm_view = c_h2.selectbox("Type d'analyse", ["Valeur Moyenne", "Évolution vs M-1", "Évolution vs N-1"])
@@ -401,13 +418,12 @@ elif page == "📅 Focus Jour & Semaine":
             x_col = 'D'
             
         fig = go.Figure()
-        # Courbe Jaune (Correctif: Suppression color='white' pour compatibilité Light Mode)
         fig.add_trace(go.Scatter(
             x=chart_d[x_col], y=chart_d['CA TTC'], mode='lines+markers+text', name='Actuel',
             line=dict(color='#FFD700', width=4),
             text=[f"{v:,.0f}".replace(",", " ") for v in chart_d['CA TTC']],
             textposition="top center", 
-            textfont=dict(size=13, weight='bold') # On laisse Plotly choisir la couleur (Noir/Blanc)
+            textfont=dict(size=13, weight='bold')
         ))
         fig.add_trace(go.Scatter(
             x=chart_b[x_col], y=chart_b['CA TTC'], mode='lines', name='Habitude',
@@ -477,7 +493,7 @@ elif page == "📈 Tendances & Familles":
         def plot_trend(col, title, y_col, color):
             avg = monthly[y_col].mean()
             fig = px.line(monthly, x='Mois', y=y_col, title=title, markers=True, text=y_col)
-            # Correctif couleur moyenne: Gris foncé (#555) pour visibilité sur blanc et noir
+            # COULEUR #555 pour que la moyenne soit visible sur blanc et noir
             fig.update_traces(line_color=color, textposition="top center", texttemplate='%{text:.0f}')
             fig.add_hline(y=avg, line_dash="dot", line_color="#555", annotation_text="Moyenne")
             col.plotly_chart(fig, use_container_width=True)
@@ -501,7 +517,6 @@ elif page == "📈 Tendances & Familles":
             
         with c_mix2:
             st.caption("Poids (%)")
-            # Calcul du % manuel pour affichage propre
             m_act['Total'] = m_act.groupby('Mois')['CA TTC'].transform('sum')
             m_act['Pct'] = (m_act['CA TTC'] / m_act['Total'] * 100)
             
@@ -512,9 +527,7 @@ elif page == "📈 Tendances & Familles":
     st.subheader("🔍 Performance Familles (Top 10)")
     
     if not df_famille.empty:
-        # CORRECTIF: Utilisation de la date sélectionnée (date_end) et non du max
         last_m = date_end.month; last_y = date_end.year
-        
         mask_c = (df_famille['Date'].dt.month == last_m) & (df_famille['Date'].dt.year == last_y)
         f_curr = df_famille[mask_c].groupby('FAMILLE').agg({'CA TTC':'sum', 'Quantité':'sum'})
         f_curr['PM'] = f_curr['CA TTC']/f_curr['Quantité']
