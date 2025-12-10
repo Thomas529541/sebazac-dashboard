@@ -6,7 +6,7 @@ import numpy as np
 from datetime import timedelta
 
 # --- CONFIGURATION PAGE & CSS ---
-st.set_page_config(page_title="Pilotage Commerce V7", layout="wide", page_icon="🎯")
+st.set_page_config(page_title="Pilotage Commerce V8", layout="wide", page_icon="🎯")
 
 st.markdown("""
 <style>
@@ -20,7 +20,7 @@ st.markdown("""
         margin-top: 0rem !important;
     }
     
-    /* KPI GLOBAL STYLES (CENTRÉ) */
+    /* KPI GLOBAL STYLES */
     .kpi-container {
         background-color: #262730; border-radius: 8px; padding: 15px;
         border-left: 5px solid #FF4B4B; margin-bottom: 10px;
@@ -48,10 +48,15 @@ st.markdown("""
     .metric-val { font-size: 15px; font-weight: bold; color: white; margin: 2px 0; }
     .metric-delta { font-size: 10px; }
     
-    /* PHRASES INTELLIGENTES (HEATMAP) */
+    /* PHRASES INTELLIGENTES (HIGHLIGHTS) */
     .smart-alert {
         background-color: #2b3e50; color: #e0e0e0; padding: 15px; border-radius: 8px;
-        border-left: 5px solid #FFD700; margin-bottom: 15px; font-size: 15px;
+        border-left: 5px solid #00C851; margin-bottom: 15px; font-size: 15px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    .smart-alert-warn {
+        background-color: #3e2b2b; color: #e0e0e0; padding: 15px; border-radius: 8px;
+        border-left: 5px solid #FF4444; margin-bottom: 15px; font-size: 15px;
         box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     }
     
@@ -71,13 +76,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 0. PALETTE DE COULEURS FIXES ---
+# --- 0. PALETTE ---
 COLOR_MAP = {
     "Tabac": "#607D8B", "Jeux": "#29B6F6", "Bar Brasserie": "#AB47BC",
     "Presse": "#FF7043", "Divers": "#8D6E63", "Monétique": "#FFCA28", "Autres": "#78909C"
 }
 
-# --- 1. CHARGEMENT ROBUSTE ---
+# --- 1. CHARGEMENT ---
 @st.cache_data
 def load_data():
     try:
@@ -123,7 +128,7 @@ def fmt_val(val, unit=""):
     return f"{val:,.0f}".replace(",", " ")
 
 # ==============================================================================
-# MENU & FILTRES GLOBAUX
+# MENU & FILTRES
 # ==============================================================================
 st.sidebar.title("🎯 Pilotage")
 page = st.sidebar.radio("Navigation :", ["🏠 Synthèse Mensuelle", "📅 Focus Jour & Semaine", "📈 Tendances & Familles"])
@@ -141,7 +146,7 @@ if page == "🏠 Synthèse Mensuelle":
     mois_sel = st.sidebar.selectbox("Mois", mois_dispo, format_func=lambda x: noms_mois[x])
     waterfall_comp = st.sidebar.radio("Cascade vs :", ["Mois Précédent (M-1)", "Année Précédente (N-1)"])
 
-    # PREP DATA
+    # DATA PREP
     df_curr = consolidate_registers(df_horaire[(df_horaire['Date'].dt.year == annee_sel) & (df_horaire['Date'].dt.month == mois_sel)])
     df_act_curr = df_activite[(df_activite['Date'].dt.year == annee_sel) & (df_activite['Date'].dt.month == mois_sel)]
     
@@ -156,7 +161,7 @@ if page == "🏠 Synthèse Mensuelle":
 
     st.title(f"Cockpit : {noms_mois[mois_sel]} {annee_sel}")
     
-    # 1. KPIs GLOBAUX
+    # 1. KPIs
     ca_c, cli_c = df_curr['CA TTC'].sum(), df_curr['Nombre de clients'].sum()
     pm_c = ca_c/cli_c if cli_c else 0
     ca_m1, cli_m1 = df_m1['CA TTC'].sum(), df_m1['Nombre de clients'].sum()
@@ -185,7 +190,7 @@ if page == "🏠 Synthèse Mensuelle":
 
     st.markdown("---")
 
-    # 2. COLONNES : EQUILIBRE + CASCADE
+    # 2. COLONNES
     c_left, c_right = st.columns([1, 2])
     
     with c_left:
@@ -201,7 +206,6 @@ if page == "🏠 Synthèse Mensuelle":
             ca, cli, pm = get_moment_stats(df_curr, mom)
             ca_m, cli_m, pm_m = get_moment_stats(df_m1, mom)
             ca_n, cli_n, pm_n = get_moment_stats(df_n1, mom)
-            
             ev_ca_m, cl_ca_m, _ = calc_evo(ca, ca_m); ev_ca_n, cl_ca_n, _ = calc_evo(ca, ca_n)
             ev_cli_m, cl_cli_m, _ = calc_evo(cli, cli_m); ev_cli_n, cl_cli_n, _ = calc_evo(cli, cli_n)
             ev_pm_m, cl_pm_m, _ = calc_evo(pm, pm_m); ev_pm_n, cl_pm_n, _ = calc_evo(pm, pm_n)
@@ -213,9 +217,24 @@ if page == "🏠 Synthèse Mensuelle":
                     <span style="font-size:12px; font-weight:normal; color:#aaa;">{(ca/ca_c*100 if ca_c>0 else 0):.0f}% CA</span>
                 </div>
                 <div class="detail-grid">
-                    <div><div class="metric-label">CA</div><div class="metric-val">{ca/1000:.1f}k€</div><div class="metric-delta {cl_ca_m}">M-1 {ev_ca_m:+.0f}%</div><div class="metric-delta {cl_ca_n}">N-1 {ev_ca_n:+.0f}%</div></div>
-                    <div><div class="metric-label">Freq.</div><div class="metric-val">{cli/1000:.1f}k</div><div class="metric-delta {cl_cli_m}">{ev_cli_m:+.0f}%</div><div class="metric-delta {cl_cli_n}">{ev_cli_n:+.0f}%</div></div>
-                    <div><div class="metric-label">Panier</div><div class="metric-val">{pm:.1f}€</div><div class="metric-delta {cl_pm_m}">{ev_pm_m:+.0f}%</div><div class="metric-delta {cl_pm_n}">{ev_pm_n:+.0f}%</div></div>
+                    <div>
+                        <div class="metric-label">CA</div>
+                        <div class="metric-val">{ca/1000:.1f}k€</div>
+                        <div class="metric-delta {cl_ca_m}">M-1 {ev_ca_m:+.0f}%</div>
+                        <div class="metric-delta {cl_ca_n}">N-1 {ev_ca_n:+.0f}%</div>
+                    </div>
+                    <div>
+                        <div class="metric-label">Freq.</div>
+                        <div class="metric-val">{cli/1000:.1f}k</div>
+                        <div class="metric-delta {cl_cli_m}">{ev_cli_m:+.0f}%</div>
+                        <div class="metric-delta {cl_cli_n}">{ev_cli_n:+.0f}%</div>
+                    </div>
+                    <div>
+                        <div class="metric-label">Panier</div>
+                        <div class="metric-val">{pm:.1f}€</div>
+                        <div class="metric-delta {cl_pm_m}">{ev_pm_m:+.0f}%</div>
+                        <div class="metric-delta {cl_pm_n}">{ev_pm_n:+.0f}%</div>
+                    </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -223,7 +242,6 @@ if page == "🏠 Synthèse Mensuelle":
     with c_right:
         if "M-1" in waterfall_comp: lbl_prev = f"{noms_mois[prev_m]}"; df_prev = df_act_m1; start_val = ca_m1
         else: lbl_prev = f"{noms_mois[mois_sel]} {annee_sel-1}"; df_prev = df_act_n1; start_val = ca_n1
-        
         st.subheader(f"🌉 Pont CA : {lbl_prev} ➔ Actuel")
         
         if not df_act_curr.empty and not df_prev.empty:
@@ -260,38 +278,51 @@ if page == "🏠 Synthèse Mensuelle":
 
     st.markdown("---")
 
-    # 3. HEATMAP + PHRASES INTELLIGENTES
-    st.subheader("🔥 Heatmap Hebdomadaire")
+    # 3. HEATMAP & PHRASES
+    st.subheader("🔥 Heatmap Hebdomadaire & Highlights")
     
-    # --- BLOC PHRASES ---
-    if not df_curr.empty:
+    # --- LOGIQUE PHRASES INTELLIGENTES ---
+    if not df_curr.empty and not df_n1.empty:
         df_curr['Day'] = df_curr['Date'].dt.day_name()
-        d_stats = df_curr.groupby('Day')['CA TTC'].sum()
+        df_n1['Day'] = df_n1['Date'].dt.day_name()
         
-        # Mapping FR
-        fr = {'Monday':'Lundi','Tuesday':'Mardi','Wednesday':'Mercredi','Thursday':'Jeudi','Friday':'Vendredi','Saturday':'Samedi','Sunday':'Dimanche'}
+        # Moyenne par jour de semaine pour lisser les effets calendaires
+        stats_curr = df_curr.groupby('Day')['CA TTC'].mean()
+        stats_n1 = df_n1.groupby('Day')['CA TTC'].mean()
         
-        if not d_stats.empty:
-            best = d_stats.idxmax()
-            worst = d_stats.idxmin()
+        fr_map = {'Monday':'Lundi','Tuesday':'Mardi','Wednesday':'Mercredi','Thursday':'Jeudi','Friday':'Vendredi','Saturday':'Samedi','Sunday':'Dimanche'}
+        days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        
+        # Calcul Ecart % pour chaque jour
+        deltas = {}
+        for d in days_order:
+            vc = stats_curr.get(d, 0)
+            vn = stats_n1.get(d, 0)
+            if vn > 0: deltas[d] = ((vc - vn) / vn) * 100
+            else: deltas[d] = 0
             
-            # Evo Best day vs N-1
-            df_n1['Day'] = df_n1['Date'].dt.day_name()
-            n1_stats = df_n1.groupby('Day')['CA TTC'].sum()
-            val_c = d_stats.get(best, 0); val_n = n1_stats.get(best, 0)
+        # Trouver les anomalies
+        # Max growth
+        best_d = max(deltas, key=deltas.get)
+        best_val = deltas[best_d]
+        
+        # Worst drop
+        worst_d = min(deltas, key=deltas.get)
+        worst_val = deltas[worst_d]
+        
+        alerts = []
+        if best_val > 5:
+            alerts.append(f"🚀 **Performance Exceptionnelle :** Vos **{fr_map[best_d]}s** surperforment de **+{best_val:.1f}%** par rapport à votre moyenne habituelle (N-1).")
+        if worst_val < -5:
+            alerts.append(f"⚠️ **Point de Vigilance :** Vos **{fr_map[worst_d]}s** décrochent de **{worst_val:.1f}%** vs N-1.")
             
-            diff_txt = ""
-            if val_n > 0:
-                diff = ((val_c - val_n)/val_n)*100
-                diff_txt = f"(Evo N-1 : {diff:+.1f}%)"
-
-            st.markdown(f"""
-            <div class="smart-alert">
-                🔥 <b>Top Performance :</b> Le <b>{fr.get(best, best)}</b> est votre meilleure journée {diff_txt}.<br>
-                ❄️ <b>Creux :</b> Le <b>{fr.get(worst, worst)}</b> est la journée la plus calme.
-            </div>
-            """, unsafe_allow_html=True)
-    # --------------------
+        if alerts:
+            for alert in alerts:
+                css_class = "smart-alert" if "🚀" in alert else "smart-alert-warn"
+                st.markdown(f"<div class='{css_class}'>{alert}</div>", unsafe_allow_html=True)
+        else:
+            st.info("✅ Aucune anomalie majeure détectée par rapport à l'année dernière (Variations < 5%).")
+    # -------------------------------------
 
     c_h1, c_h2 = st.columns([2, 8])
     hm_kpi = c_h1.selectbox("Indicateur Heatmap", ["CA TTC", "Clients", "Panier"])
@@ -493,7 +524,6 @@ elif page == "📈 Tendances & Familles":
         def plot_trend(col, title, y_col, color):
             avg = monthly[y_col].mean()
             fig = px.line(monthly, x='Mois', y=y_col, title=title, markers=True, text=y_col)
-            # COULEUR #555 pour que la moyenne soit visible sur blanc et noir
             fig.update_traces(line_color=color, textposition="top center", texttemplate='%{text:.0f}')
             fig.add_hline(y=avg, line_dash="dot", line_color="#555", annotation_text="Moyenne")
             col.plotly_chart(fig, use_container_width=True)
