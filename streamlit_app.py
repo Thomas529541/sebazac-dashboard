@@ -6,21 +6,33 @@ import numpy as np
 from datetime import timedelta
 
 # --- CONFIGURATION PAGE & CSS ---
-st.set_page_config(page_title="Pilotage Commerce V8", layout="wide", page_icon="🎯")
+st.set_page_config(page_title="Pilotage Commerce Mobile", layout="wide", page_icon="🎯")
 
 st.markdown("""
 <style>
-    /* RESET ET MARGES */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
+    /* 1. GESTION DU MENU ET DES MARGES (PC vs MOBILE) */
+    
+    /* Par défaut (PC/Tablette) : On cache le header et on remonte le contenu */
+    header { visibility: hidden; }
+    #MainMenu { visibility: hidden; }
+    footer { visibility: hidden; }
     .block-container {
         padding-top: 1rem !important;
         padding-bottom: 3rem !important;
-        margin-top: 0rem !important;
+    }
+
+    /* SPÉCIFIQUE MOBILE (Ecrans < 768px) */
+    @media (max-width: 768px) {
+        /* On réaffiche le header pour voir le bouton Menu (Hamburger) */
+        header { visibility: visible !important; }
+        
+        /* On pousse le contenu vers le bas pour ne pas qu'il soit caché sous le header */
+        .block-container {
+            padding-top: 5rem !important; /* Marge de sécurité mobile */
+        }
     }
     
-    /* KPI GLOBAL STYLES */
+    /* 2. STYLE DES KPIS & CARTES */
     .kpi-container {
         background-color: #262730; border-radius: 8px; padding: 15px;
         border-left: 5px solid #FF4B4B; margin-bottom: 10px;
@@ -30,7 +42,6 @@ st.markdown("""
     .kpi-value { font-size: 28px; font-weight: bold; color: white; margin: 5px 0; }
     .kpi-sub { font-size: 13px; margin-top: 5px; display: flex; justify-content: center; gap: 15px; }
     
-    /* CARTES DÉTAILLÉES */
     .detail-card {
         background-color: #1E1E1E; border-radius: 8px; padding: 12px;
         border: 1px solid #333; margin-bottom: 10px;
@@ -48,7 +59,14 @@ st.markdown("""
     .metric-val { font-size: 15px; font-weight: bold; color: white; margin: 2px 0; }
     .metric-delta { font-size: 10px; }
     
-    /* PHRASES INTELLIGENTES (HIGHLIGHTS) */
+    .op-kpi-box {
+        background-color: #383838; padding: 15px; border-radius: 8px; 
+        margin-bottom: 10px; text-align: center; border: 1px solid #555;
+    }
+    .op-kpi-title { color: #ddd; font-size: 14px; margin-bottom: 5px; }
+    .op-kpi-val { color: #fff; font-size: 24px; font-weight: bold; }
+    .op-kpi-bench { color: #aaa; font-size: 14px; margin-top: 5px; font-weight: 500; }
+
     .smart-alert {
         background-color: #2b3e50; color: #e0e0e0; padding: 15px; border-radius: 8px;
         border-left: 5px solid #00C851; margin-bottom: 15px; font-size: 15px;
@@ -59,17 +77,7 @@ st.markdown("""
         border-left: 5px solid #FF4444; margin-bottom: 15px; font-size: 15px;
         box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     }
-    
-    /* KPIS OPERATIONNELS */
-    .op-kpi-box {
-        background-color: #383838; padding: 15px; border-radius: 8px; 
-        margin-bottom: 10px; text-align: center; border: 1px solid #555;
-    }
-    .op-kpi-title { color: #ddd; font-size: 14px; margin-bottom: 5px; }
-    .op-kpi-val { color: #fff; font-size: 24px; font-weight: bold; }
-    .op-kpi-bench { color: #aaa; font-size: 14px; margin-top: 5px; font-weight: 500; }
 
-    /* COULEURS */
     .pos { color: #00FF00; }
     .neg { color: #FF4444; }
     .neu { color: #888888; }
@@ -146,7 +154,7 @@ if page == "🏠 Synthèse Mensuelle":
     mois_sel = st.sidebar.selectbox("Mois", mois_dispo, format_func=lambda x: noms_mois[x])
     waterfall_comp = st.sidebar.radio("Cascade vs :", ["Mois Précédent (M-1)", "Année Précédente (N-1)"])
 
-    # DATA PREP
+    # PREP
     df_curr = consolidate_registers(df_horaire[(df_horaire['Date'].dt.year == annee_sel) & (df_horaire['Date'].dt.month == mois_sel)])
     df_act_curr = df_activite[(df_activite['Date'].dt.year == annee_sel) & (df_activite['Date'].dt.month == mois_sel)]
     
@@ -169,6 +177,7 @@ if page == "🏠 Synthèse Mensuelle":
     ca_n1, cli_n1 = df_n1['CA TTC'].sum(), df_n1['Nombre de clients'].sum()
     pm_n1 = ca_n1/cli_n1 if cli_n1 else 0
 
+    k1, k2, k3 = st.columns(3)
     def kpi_display(title, val, val_m1, val_n1, unit=""):
         e_m, c_m, s_m = calc_evo(val, val_m1)
         e_n, c_n, s_n = calc_evo(val, val_n1)
@@ -183,7 +192,6 @@ if page == "🏠 Synthèse Mensuelle":
         </div>
         """, unsafe_allow_html=True)
 
-    k1, k2, k3 = st.columns(3)
     with k1: kpi_display("Chiffre d'Affaires", ca_c, ca_m1, ca_n1, "€")
     with k2: kpi_display("Fréquentation", cli_c, cli_m1, cli_n1, "")
     with k3: kpi_display("Panier Moyen", pm_c, pm_m1, pm_n1, "PM")
@@ -217,24 +225,9 @@ if page == "🏠 Synthèse Mensuelle":
                     <span style="font-size:12px; font-weight:normal; color:#aaa;">{(ca/ca_c*100 if ca_c>0 else 0):.0f}% CA</span>
                 </div>
                 <div class="detail-grid">
-                    <div>
-                        <div class="metric-label">CA</div>
-                        <div class="metric-val">{ca/1000:.1f}k€</div>
-                        <div class="metric-delta {cl_ca_m}">M-1 {ev_ca_m:+.0f}%</div>
-                        <div class="metric-delta {cl_ca_n}">N-1 {ev_ca_n:+.0f}%</div>
-                    </div>
-                    <div>
-                        <div class="metric-label">Freq.</div>
-                        <div class="metric-val">{cli/1000:.1f}k</div>
-                        <div class="metric-delta {cl_cli_m}">{ev_cli_m:+.0f}%</div>
-                        <div class="metric-delta {cl_cli_n}">{ev_cli_n:+.0f}%</div>
-                    </div>
-                    <div>
-                        <div class="metric-label">Panier</div>
-                        <div class="metric-val">{pm:.1f}€</div>
-                        <div class="metric-delta {cl_pm_m}">{ev_pm_m:+.0f}%</div>
-                        <div class="metric-delta {cl_pm_n}">{ev_pm_n:+.0f}%</div>
-                    </div>
+                    <div><div class="metric-label">CA</div><div class="metric-val">{ca/1000:.1f}k€</div><div class="metric-delta {cl_ca_m}">M-1 {ev_ca_m:+.0f}%</div><div class="metric-delta {cl_ca_n}">N-1 {ev_ca_n:+.0f}%</div></div>
+                    <div><div class="metric-label">Freq.</div><div class="metric-val">{cli/1000:.1f}k</div><div class="metric-delta {cl_cli_m}">{ev_cli_m:+.0f}%</div><div class="metric-delta {cl_cli_n}">{ev_cli_n:+.0f}%</div></div>
+                    <div><div class="metric-label">Panier</div><div class="metric-val">{pm:.1f}€</div><div class="metric-delta {cl_pm_m}">{ev_pm_m:+.0f}%</div><div class="metric-delta {cl_pm_n}">{ev_pm_n:+.0f}%</div></div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -278,52 +271,39 @@ if page == "🏠 Synthèse Mensuelle":
 
     st.markdown("---")
 
-    # 3. HEATMAP & PHRASES
+    # 3. HEATMAP & HIGHLIGHTS
     st.subheader("🔥 Heatmap Hebdomadaire & Highlights")
     
-    # --- LOGIQUE PHRASES INTELLIGENTES ---
+    # HIGHLIGHTS
     if not df_curr.empty and not df_n1.empty:
         df_curr['Day'] = df_curr['Date'].dt.day_name()
         df_n1['Day'] = df_n1['Date'].dt.day_name()
         
-        # Moyenne par jour de semaine pour lisser les effets calendaires
         stats_curr = df_curr.groupby('Day')['CA TTC'].mean()
         stats_n1 = df_n1.groupby('Day')['CA TTC'].mean()
         
         fr_map = {'Monday':'Lundi','Tuesday':'Mardi','Wednesday':'Mercredi','Thursday':'Jeudi','Friday':'Vendredi','Saturday':'Samedi','Sunday':'Dimanche'}
         days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         
-        # Calcul Ecart % pour chaque jour
         deltas = {}
         for d in days_order:
-            vc = stats_curr.get(d, 0)
-            vn = stats_n1.get(d, 0)
-            if vn > 0: deltas[d] = ((vc - vn) / vn) * 100
-            else: deltas[d] = 0
+            vc = stats_curr.get(d, 0); vn = stats_n1.get(d, 0)
+            deltas[d] = ((vc - vn) / vn) * 100 if vn > 0 else 0
             
-        # Trouver les anomalies
-        # Max growth
-        best_d = max(deltas, key=deltas.get)
-        best_val = deltas[best_d]
-        
-        # Worst drop
-        worst_d = min(deltas, key=deltas.get)
-        worst_val = deltas[worst_d]
+        best_d = max(deltas, key=deltas.get); best_val = deltas[best_d]
+        worst_d = min(deltas, key=deltas.get); worst_val = deltas[worst_d]
         
         alerts = []
-        if best_val > 5:
-            alerts.append(f"🚀 **Performance Exceptionnelle :** Vos **{fr_map[best_d]}s** surperforment de **+{best_val:.1f}%** par rapport à votre moyenne habituelle (N-1).")
-        if worst_val < -5:
-            alerts.append(f"⚠️ **Point de Vigilance :** Vos **{fr_map[worst_d]}s** décrochent de **{worst_val:.1f}%** vs N-1.")
+        if best_val > 5: alerts.append(f"🚀 **Performance Exceptionnelle :** Vos **{fr_map[best_d]}s** surperforment de **+{best_val:.1f}%** vs N-1.")
+        if worst_val < -5: alerts.append(f"⚠️ **Point de Vigilance :** Vos **{fr_map[worst_d]}s** décrochent de **{worst_val:.1f}%** vs N-1.")
             
         if alerts:
             for alert in alerts:
-                css_class = "smart-alert" if "🚀" in alert else "smart-alert-warn"
-                st.markdown(f"<div class='{css_class}'>{alert}</div>", unsafe_allow_html=True)
-        else:
-            st.info("✅ Aucune anomalie majeure détectée par rapport à l'année dernière (Variations < 5%).")
-    # -------------------------------------
+                css = "smart-alert" if "🚀" in alert else "smart-alert-warn"
+                st.markdown(f"<div class='{css}'>{alert}</div>", unsafe_allow_html=True)
+        else: st.info("✅ Aucune anomalie majeure détectée (Variations < 5%).")
 
+    # HEATMAP
     c_h1, c_h2 = st.columns([2, 8])
     hm_kpi = c_h1.selectbox("Indicateur Heatmap", ["CA TTC", "Clients", "Panier"])
     hm_view = c_h2.selectbox("Type d'analyse", ["Valeur Moyenne", "Évolution vs M-1", "Évolution vs N-1"])
@@ -377,7 +357,6 @@ if page == "🏠 Synthèse Mensuelle":
 elif page == "📅 Focus Jour & Semaine":
     st.sidebar.header("Filtres Opérationnels")
     view_mode = st.sidebar.radio("Vue :", ["Journée", "Semaine Complète"], horizontal=True)
-    
     min_date = df_horaire['Date'].min()
     max_date = df_horaire['Date'].max()
     date_focus = st.sidebar.date_input("Date Pivot", value=max_date, min_value=min_date, max_value=max_date)
@@ -387,11 +366,9 @@ elif page == "📅 Focus Jour & Semaine":
 
     if view_mode == "Journée":
         start_date = date_focus; end_date = date_focus
-        lbl_per = f"Journée du {date_focus.strftime('%d/%m/%Y')}"
     else:
         start_date = date_focus - timedelta(days=date_focus.weekday())
         end_date = start_date + timedelta(days=6)
-        lbl_per = f"Semaine du {start_date.strftime('%d/%m')} au {end_date.strftime('%d/%m')}"
     
     mask_f = (df_horaire['Date'] >= start_date) & (df_horaire['Date'] <= end_date)
     df_f = consolidate_registers(df_horaire[mask_f])
@@ -453,8 +430,7 @@ elif page == "📅 Focus Jour & Semaine":
             x=chart_d[x_col], y=chart_d['CA TTC'], mode='lines+markers+text', name='Actuel',
             line=dict(color='#FFD700', width=4),
             text=[f"{v:,.0f}".replace(",", " ") for v in chart_d['CA TTC']],
-            textposition="top center", 
-            textfont=dict(size=13, weight='bold')
+            textposition="top center", textfont=dict(size=13, weight='bold')
         ))
         fig.add_trace(go.Scatter(
             x=chart_b[x_col], y=chart_b['CA TTC'], mode='lines', name='Habitude',
@@ -500,7 +476,7 @@ elif page == "📅 Focus Jour & Semaine":
         st.dataframe(disp.style.apply(style_rows, axis=1), use_container_width=True, hide_index=True)
 
 # ==============================================================================
-# PAGE 3 : TENDANCES & FAMILLES
+# PAGE 3 : TENDANCES
 # ==============================================================================
 elif page == "📈 Tendances & Familles":
     st.sidebar.header("Filtres")
@@ -524,6 +500,7 @@ elif page == "📈 Tendances & Familles":
         def plot_trend(col, title, y_col, color):
             avg = monthly[y_col].mean()
             fig = px.line(monthly, x='Mois', y=y_col, title=title, markers=True, text=y_col)
+            # COULEUR #555 pour visibilité sur light/dark
             fig.update_traces(line_color=color, textposition="top center", texttemplate='%{text:.0f}')
             fig.add_hline(y=avg, line_dash="dot", line_color="#555", annotation_text="Moyenne")
             col.plotly_chart(fig, use_container_width=True)
@@ -549,7 +526,6 @@ elif page == "📈 Tendances & Familles":
             st.caption("Poids (%)")
             m_act['Total'] = m_act.groupby('Mois')['CA TTC'].transform('sum')
             m_act['Pct'] = (m_act['CA TTC'] / m_act['Total'] * 100)
-            
             fig2 = px.bar(m_act, x='Mois', y='Pct', color='ACTIVITE', color_discrete_map=COLOR_MAP, text_auto='.0f')
             st.plotly_chart(fig2, use_container_width=True)
             
