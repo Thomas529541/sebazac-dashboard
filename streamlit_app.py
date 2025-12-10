@@ -28,19 +28,21 @@ st.markdown("""
     .kpi-val { font-size: 24px; font-weight: bold; color: white; margin: 2px 0; }
     .kpi-label { font-size: 13px; color: #aaaaaa; }
     
-    /* SUPER CARTE ACTIVITÉ (Ligne 2) */
+    /* SUPER CARTE (Activités & Matin/Soir) */
     .act-card {
-        background-color: #1E1E1E; border-radius: 10px; padding: 10px;
-        border: 1px solid #333; margin-bottom: 10px;
+        background-color: #1E1E1E; border-radius: 10px; padding: 12px;
+        border: 1px solid #333; margin-bottom: 15px;
     }
     .act-title { 
         font-size: 16px; font-weight: bold; color: #FFD700; 
-        border-bottom: 1px solid #333; padding-bottom: 5px; margin-bottom: 8px;
+        border-bottom: 1px solid #333; padding-bottom: 8px; margin-bottom: 10px;
+        display: flex; justify-content: space-between;
     }
+    .act-share { font-size: 12px; color: #aaa; font-weight: normal; margin-top: 2px; }
     .act-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; text-align: center; }
-    .act-metric { font-size: 11px; color: #888; text-transform: uppercase; }
-    .act-val { font-size: 16px; font-weight: bold; color: #fff; }
-    .act-delta { font-size: 10px; display: block; }
+    .act-metric { font-size: 11px; color: #888; text-transform: uppercase; margin-bottom: 2px; }
+    .act-val { font-size: 17px; font-weight: bold; color: #fff; margin-bottom: 4px; }
+    .act-delta { font-size: 11px; display: block; line-height: 1.2; }
     
     /* COULEURS VARIATIONS */
     .pos { color: #00FF00; }
@@ -93,6 +95,7 @@ df_horaire, df_activite = load_data()
 # --- CONSOLIDATION CAISSES ---
 def consolidate_registers(df):
     if df.empty: return df
+    # Important : On garde 'Heure' pour pouvoir recalculer Matin/Soir plus tard
     return df.groupby(['Date', 'Heure']).sum(numeric_only=True).reset_index()
 
 # --- 2. FILTRES ---
@@ -166,70 +169,48 @@ with k1: kpi_global("Chiffre d'Affaires", ca_c, ca_m1, ca_n1, "€")
 with k2: kpi_global("Fréquentation", cli_c, cli_m1, cli_n1, "")
 with k3: kpi_global("Panier Moyen", pm_c, pm_m1, pm_n1, "PM")
 
-# --- 4. LIGNE 2 : ZOOM ACTIVITÉS (NOUVEAU) ---
+# --- 4. LIGNE 2 : ZOOM ACTIVITÉS ---
 st.caption("🎯 Zoom Activités Clés")
 
 def get_act_stats(df, activity_name):
-    # Logique "Autres" ou Activité précise
     if activity_name == "Autres":
-        # Tout sauf les 3 gros
         mask = ~df['ACTIVITE'].isin(['Tabac', 'Jeux', 'Bar Brasserie'])
         d = df[mask]
     else:
         d = df[df['ACTIVITE'] == activity_name]
     
     ca = d['CA TTC'].sum()
-    vol = d['Quantité'].sum() # Proxy fréquentation
+    vol = d['Quantité'].sum()
     pm = ca / vol if vol > 0 else 0
     return ca, vol, pm
 
-# Liste des cartes à créer
 activites_target = ["Tabac", "Jeux", "Bar Brasserie", "Autres"]
 cols_act = st.columns(4)
 
 for i, act_name in enumerate(activites_target):
     with cols_act[i]:
-        # Calculs Current, M-1, N-1
         ca, vol, pm = get_act_stats(df_act_curr, act_name)
         ca_m, vol_m, pm_m = get_act_stats(df_act_m1, act_name)
         ca_n, vol_n, pm_n = get_act_stats(df_act_n1, act_name)
         
-        # Calcul variations
         ev_ca_m, cl_ca_m, _ = calc_evo(ca, ca_m)
         ev_ca_n, cl_ca_n, _ = calc_evo(ca, ca_n)
-        
         ev_vol_m, cl_vol_m, _ = calc_evo(vol, vol_m)
         ev_vol_n, cl_vol_n, _ = calc_evo(vol, vol_n)
-        
         ev_pm_m, cl_pm_m, _ = calc_evo(pm, pm_m)
         ev_pm_n, cl_pm_n, _ = calc_evo(pm, pm_n)
         
-        # Icones
         icon = "🚬" if act_name == "Tabac" else "🎲" if act_name == "Jeux" else "☕" if "Bar" in act_name else "📦"
 
-        # HTML Super Carte
         st.markdown(f"""
         <div class="act-card">
-            <div class="act-title">{icon} {act_name}</div>
+            <div class="act-title">
+                <span>{icon} {act_name}</span>
+            </div>
             <div class="act-grid">
-                <div>
-                    <div class="act-metric">CA</div>
-                    <div class="act-val">{ca/1000:.1f}k€</div>
-                    <div class="act-delta {cl_ca_m}">M-1 {ev_ca_m:+.0f}%</div>
-                    <div class="act-delta {cl_ca_n}">N-1 {ev_ca_n:+.0f}%</div>
-                </div>
-                <div>
-                    <div class="act-metric">Vol.</div>
-                    <div class="act-val">{vol/1000:.1f}k</div>
-                    <div class="act-delta {cl_vol_m}"> {ev_vol_m:+.0f}%</div>
-                    <div class="act-delta {cl_vol_n}"> {ev_vol_n:+.0f}%</div>
-                </div>
-                <div>
-                    <div class="act-metric">Panier</div>
-                    <div class="act-val">{pm:.1f}€</div>
-                    <div class="act-delta {cl_pm_m}"> {ev_pm_m:+.0f}%</div>
-                    <div class="act-delta {cl_pm_n}"> {ev_pm_n:+.0f}%</div>
-                </div>
+                <div><div class="act-metric">CA</div><div class="act-val">{ca/1000:.1f}k€</div><div class="act-delta {cl_ca_m}">M-1 {ev_ca_m:+.0f}%</div><div class="act-delta {cl_ca_n}">N-1 {ev_ca_n:+.0f}%</div></div>
+                <div><div class="act-metric">Vol.</div><div class="act-val">{vol/1000:.1f}k</div><div class="act-delta {cl_vol_m}"> {ev_vol_m:+.0f}%</div><div class="act-delta {cl_vol_n}"> {ev_vol_n:+.0f}%</div></div>
+                <div><div class="act-metric">Panier</div><div class="act-val">{pm:.1f}€</div><div class="act-delta {cl_pm_m}"> {ev_pm_m:+.0f}%</div><div class="act-delta {cl_pm_n}"> {ev_pm_n:+.0f}%</div></div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -239,42 +220,85 @@ st.markdown("---")
 # --- 5. ANALYSES GRAPHIQUES ---
 c_left, c_right = st.columns([1, 2])
 
-# A. JAUGES MATIN/SOIR
+# A. SUPER CARTES : MATIN / APRES-MIDI
 with c_left:
-    st.subheader("⚖️ Équilibre Matin / Soir")
-    if not df_curr.empty:
-        df_curr['Heure_Int'] = df_curr['Heure'].astype(str).str.slice(0, 2).astype(int)
-        df_curr['Moment'] = df_curr['Heure_Int'].apply(lambda x: 'Matin' if x < 13 else 'Après-Midi')
-        stats = df_curr.groupby('Moment').agg({'CA TTC': 'sum', 'Nombre de clients': 'sum'}).reset_index()
+    st.subheader("⚖️ Matin vs Après-Midi")
+    
+    # Fonction pour extraire les stats d'un moment
+    def get_moment_stats(df, moment):
+        if df.empty: return 0, 0, 0
+        df = df.copy()
+        df['Heure_Int'] = df['Heure'].astype(str).str.slice(0, 2).astype(int)
+        if moment == 'Matin':
+            d = df[df['Heure_Int'] < 13]
+        else:
+            d = df[df['Heure_Int'] >= 13]
         
-        total_ca = stats['CA TTC'].sum()
-        total_cli = stats['Nombre de clients'].sum()
-        
-        matin_row = stats[stats['Moment']=='Matin']
-        # Sécurité si 0 matin
-        matin_ca = matin_row['CA TTC'].sum() if not matin_row.empty else 0
-        matin_cli = matin_row['Nombre de clients'].sum() if not matin_row.empty else 0
-        
-        pct_ca_m = (matin_ca / total_ca * 100) if total_ca > 0 else 0
-        pct_cli_m = (matin_cli / total_cli * 100) if total_cli > 0 else 0
-        pct_ca_s, pct_cli_s = 100 - pct_ca_m, 100 - pct_cli_m
+        ca = d['CA TTC'].sum()
+        cli = d['Nombre de clients'].sum()
+        pm = ca / cli if cli > 0 else 0
+        return ca, cli, pm
 
-        fig = go.Figure()
-        # Barres CA
-        fig.add_trace(go.Bar(y=['CA'], x=[pct_ca_m], name='Matin', orientation='h', marker_color='#29B6F6', 
-                             text=f"Matin<br><b>{pct_ca_m:.0f}%</b>", textposition='inside'))
-        fig.add_trace(go.Bar(y=['CA'], x=[pct_ca_s], name='Soir', orientation='h', marker_color='#01579B', 
-                             text=f"Soir<br><b>{pct_ca_s:.0f}%</b>", textposition='inside'))
-        # Barres Clients
-        fig.add_trace(go.Bar(y=['Freq'], x=[pct_cli_m], name='Matin', orientation='h', marker_color='#66BB6A', 
-                             text=f"Matin<br><b>{pct_cli_m:.0f}%</b>", textposition='inside', showlegend=False))
-        fig.add_trace(go.Bar(y=['Freq'], x=[pct_cli_s], name='Soir', orientation='h', marker_color='#1B5E20', 
-                             text=f"Soir<br><b>{pct_cli_s:.0f}%</b>", textposition='inside', showlegend=False))
+    # Stats Actuelles
+    ca_matin, cli_matin, pm_matin = get_moment_stats(df_curr, 'Matin')
+    ca_soir, cli_soir, pm_soir = get_moment_stats(df_curr, 'Après-Midi')
+    
+    # Stats Historiques (M-1 / N-1) pour variations
+    ca_m1_m, cli_m1_m, pm_m1_m = get_moment_stats(df_m1, 'Matin')
+    ca_n1_m, cli_n1_m, pm_n1_m = get_moment_stats(df_n1, 'Matin')
+    
+    ca_m1_s, cli_m1_s, pm_m1_s = get_moment_stats(df_m1, 'Après-Midi')
+    ca_n1_s, cli_n1_s, pm_n1_s = get_moment_stats(df_n1, 'Après-Midi')
+    
+    # Parts de marché (Actuel)
+    total_ca_curr = ca_matin + ca_soir
+    share_matin = (ca_matin / total_ca_curr * 100) if total_ca_curr > 0 else 0
+    share_soir = 100 - share_matin
+    
+    # --- CARTE MATIN ---
+    ev_ca, cl_ca, _ = calc_evo(ca_matin, ca_m1_m)
+    ev_ca_n, cl_ca_n, _ = calc_evo(ca_matin, ca_n1_m)
+    ev_cli, cl_cli, _ = calc_evo(cli_matin, cli_m1_m)
+    ev_cli_n, cl_cli_n, _ = calc_evo(cli_matin, cli_n1_m)
+    ev_pm, cl_pm, _ = calc_evo(pm_matin, pm_m1_m)
+    ev_pm_n, cl_pm_n, _ = calc_evo(pm_matin, pm_n1_m)
+    
+    st.markdown(f"""
+    <div class="act-card">
+        <div class="act-title">
+            <span>🌞 MATIN</span>
+            <span class="act-share">{share_matin:.0f}% du CA</span>
+        </div>
+        <div class="act-grid">
+            <div><div class="act-metric">CA</div><div class="act-val">{ca_matin/1000:.1f}k€</div><div class="act-delta {cl_ca}">M-1 {ev_ca:+.0f}%</div><div class="act-delta {cl_ca_n}">N-1 {ev_ca_n:+.0f}%</div></div>
+            <div><div class="act-metric">Clients</div><div class="act-val">{cli_matin/1000:.1f}k</div><div class="act-delta {cl_cli}"> {ev_cli:+.0f}%</div><div class="act-delta {cl_cli_n}"> {ev_cli_n:+.0f}%</div></div>
+            <div><div class="act-metric">Panier</div><div class="act-val">{pm_matin:.1f}€</div><div class="act-delta {cl_pm}"> {ev_pm:+.0f}%</div><div class="act-delta {cl_pm_n}"> {ev_pm_n:+.0f}%</div></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-        fig.update_layout(barmode='stack', height=200, margin=dict(l=0, r=0, t=10, b=0), showlegend=False,
-                          xaxis=dict(showgrid=False, showticklabels=False), yaxis=dict(tickfont=dict(color='white')),
-                          paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig, use_container_width=True)
+    # --- CARTE APRES-MIDI ---
+    ev_ca, cl_ca, _ = calc_evo(ca_soir, ca_m1_s)
+    ev_ca_n, cl_ca_n, _ = calc_evo(ca_soir, ca_n1_s)
+    ev_cli, cl_cli, _ = calc_evo(cli_soir, cli_m1_s)
+    ev_cli_n, cl_cli_n, _ = calc_evo(cli_soir, cli_n1_s)
+    ev_pm, cl_pm, _ = calc_evo(pm_soir, pm_m1_s)
+    ev_pm_n, cl_pm_n, _ = calc_evo(pm_soir, pm_n1_s)
+
+    st.markdown(f"""
+    <div class="act-card">
+        <div class="act-title">
+            <span>🌙 APRÈS-MIDI</span>
+            <span class="act-share">{share_soir:.0f}% du CA</span>
+        </div>
+        <div class="act-grid">
+            <div><div class="act-metric">CA</div><div class="act-val">{ca_soir/1000:.1f}k€</div><div class="act-delta {cl_ca}">M-1 {ev_ca:+.0f}%</div><div class="act-delta {cl_ca_n}">N-1 {ev_ca_n:+.0f}%</div></div>
+            <div><div class="act-metric">Clients</div><div class="act-val">{cli_soir/1000:.1f}k</div><div class="act-delta {cl_cli}"> {ev_cli:+.0f}%</div><div class="act-delta {cl_cli_n}"> {ev_cli_n:+.0f}%</div></div>
+            <div><div class="act-metric">Panier</div><div class="act-val">{pm_soir:.1f}€</div><div class="act-delta {cl_pm}"> {ev_pm:+.0f}%</div><div class="act-delta {cl_pm_n}"> {ev_pm_n:+.0f}%</div></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 
 # B. CASCADE
 with c_right:
@@ -315,14 +339,14 @@ with c_right:
         # Scale Auto
         run = [start_total]; cur = start_total
         for v in deltas.values(): cur+=v; run.append(cur)
-        max_h = max(run + [ca_c]) * 1.15
+        max_h = max(running + [ca_c] if 'running' in locals() else run + [ca_c]) * 1.15
 
         fig = go.Figure(go.Waterfall(
             orientation="v", measure=measures, x=x, y=y, text=text, textposition="outside",
             connector={"mode":"between", "line":{"width":1, "color":"#555"}},
             decreasing={"marker":{"color":"#FF4444"}}, increasing={"marker":{"color":"#00C851"}}, totals={"marker":{"color":"#33b5e5"}}
         ))
-        fig.update_layout(height=350, showlegend=False, yaxis=dict(range=[0, max_h], title="CA TTC"), margin=dict(t=10))
+        fig.update_layout(height=380, showlegend=False, yaxis=dict(range=[0, max_h], title="CA TTC"), margin=dict(t=10))
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning("Données manquantes.")
