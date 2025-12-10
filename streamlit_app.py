@@ -6,7 +6,7 @@ import numpy as np
 from datetime import timedelta
 
 # --- CONFIGURATION PAGE & CSS ---
-st.set_page_config(page_title="Pilotage Commerce V5", layout="wide", page_icon="🎯")
+st.set_page_config(page_title="Pilotage Commerce V6", layout="wide", page_icon="🎯")
 
 st.markdown("""
 <style>
@@ -477,8 +477,9 @@ elif page == "📈 Tendances & Familles":
         def plot_trend(col, title, y_col, color):
             avg = monthly[y_col].mean()
             fig = px.line(monthly, x='Mois', y=y_col, title=title, markers=True, text=y_col)
+            # Correctif couleur moyenne: Gris foncé (#555) pour visibilité sur blanc et noir
             fig.update_traces(line_color=color, textposition="top center", texttemplate='%{text:.0f}')
-            fig.add_hline(y=avg, line_dash="dot", line_color="white", annotation_text="Moyenne")
+            fig.add_hline(y=avg, line_dash="dot", line_color="#555", annotation_text="Moyenne")
             col.plotly_chart(fig, use_container_width=True)
             
         plot_trend(c1, "Chiffre d'Affaires", 'CA TTC', '#FFD700')
