@@ -4,48 +4,59 @@ import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
 
-# --- CONFIGURATION PAGE & CSS (Correction Hauteur) ---
+# --- CONFIGURATION PAGE & CSS ---
 st.set_page_config(page_title="Cockpit Commerce", layout="wide", page_icon="⚡")
 
 st.markdown("""
 <style>
-    /* 1. Masquer le menu hamburger et le footer par défaut de Streamlit */
+    /* RESET ET MARGES */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;} /* Cache la barre blanche du haut */
-
-    /* 2. Ajuster les marges pour coller au haut de l'écran SANS être coupé */
+    header {visibility: hidden;}
     .block-container {
-        padding-top: 1rem !important; /* On laisse un petit espace (1rem) pour respirer */
+        padding-top: 1rem !important;
         padding-bottom: 2rem !important;
-        max-width: 95% !important; /* Utilise plus de largeur sur l'écran */
+        margin-top: 0rem !important;
     }
     
-    /* Style KPI */
+    /* KPI GLOBAL (Ligne 1) */
     .kpi-box {
-        background-color: #262730; border-radius: 8px; padding: 15px;
+        background-color: #262730; border-radius: 8px; padding: 10px;
         text-align: center; border-left: 5px solid #FF4B4B;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 10px;
     }
-    .kpi-label { font-size: 14px; color: #aaaaaa; margin: 0; }
-    .kpi-val { font-size: 26px; font-weight: bold; color: white; margin: 5px 0; }
-    .kpi-delta { font-size: 13px; }
+    .kpi-val { font-size: 24px; font-weight: bold; color: white; margin: 2px 0; }
+    .kpi-label { font-size: 13px; color: #aaaaaa; }
     
-    /* Couleurs variations */
-    .pos { color: #00FF00; font-weight: bold; }
-    .neg { color: #FF4444; font-weight: bold; }
+    /* SUPER CARTE ACTIVITÉ (Ligne 2) */
+    .act-card {
+        background-color: #1E1E1E; border-radius: 10px; padding: 10px;
+        border: 1px solid #333; margin-bottom: 10px;
+    }
+    .act-title { 
+        font-size: 16px; font-weight: bold; color: #FFD700; 
+        border-bottom: 1px solid #333; padding-bottom: 5px; margin-bottom: 8px;
+    }
+    .act-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; text-align: center; }
+    .act-metric { font-size: 11px; color: #888; text-transform: uppercase; }
+    .act-val { font-size: 16px; font-weight: bold; color: #fff; }
+    .act-delta { font-size: 10px; display: block; }
+    
+    /* COULEURS VARIATIONS */
+    .pos { color: #00FF00; }
+    .neg { color: #FF4444; }
     .neu { color: #888888; }
     
-    /* Style Résumé Cascade */
+    /* UTILS */
     .bridge-summary {
-        font-size: 16px; font-weight: bold; text-align: center; 
-        margin-bottom: 5px; padding: 8px; background-color: #31333F; 
+        font-size: 15px; font-weight: bold; text-align: center; 
+        margin-bottom: 5px; padding: 5px; background-color: #31333F; 
         border-radius: 8px; border: 1px solid #444;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 1. CHARGEMENT ET NETTOYAGE ---
+# --- 1. CHARGEMENT ROBUSTE ---
 @st.cache_data
 def load_data():
     try:
@@ -58,16 +69,12 @@ def load_data():
                 return s.astype(str).str.replace('€', '').str.replace(' ', '').str.replace(',', '.').astype(float)
             return s
 
-        # Nettoyage
         cols_h = {'CA TTC': clean_curr, 'Nombre de clients': pd.to_numeric}
         for col, func in cols_h.items():
             if col in df_h.columns: df_h[col] = func(df_h[col])
-        
-        # DATE : On s'assure d'avoir des dates propres
         if 'Période' in df_h.columns: 
             df_h['DateFull'] = pd.to_datetime(df_h['Période'], dayfirst=True)
-            # CORRECTION CRITIQUE : On crée une colonne "Jour" pur (sans heure minute seconde)
-            df_h['Date'] = df_h['DateFull'].dt.normalize() 
+            df_h['Date'] = df_h['DateFull'].dt.normalize()
 
         cols_a = {'CA TTC': clean_curr, 'Quantité': pd.to_numeric}
         for col, func in cols_a.items():
@@ -83,17 +90,10 @@ def load_data():
 
 df_horaire, df_activite = load_data()
 
-# --- FONCTION DE CONSOLIDATION (La clé du correctif) ---
+# --- CONSOLIDATION CAISSES ---
 def consolidate_registers(df):
-    """
-    Fusionne les lignes qui ont la même Date (Jour) et la même Tranche Horaire (Heure).
-    C'est ça qui corrige le bug des -50%.
-    """
     if df.empty: return df
-    # On groupe par JOUR (sans l'heure exacte) et par CRÉNEAU (ex: '07:00 - 08:00')
-    # On somme les CA et Clients des 2 caisses
-    df_conso = df.groupby(['Date', 'Heure']).sum(numeric_only=True).reset_index()
-    return df_conso
+    return df.groupby(['Date', 'Heure']).sum(numeric_only=True).reset_index()
 
 # --- 2. FILTRES ---
 with st.sidebar:
@@ -108,27 +108,22 @@ with st.sidebar:
     st.markdown("---")
     waterfall_comp = st.radio("Cascade vs :", ["Mois Précédent (M-1)", "Année Précédente (N-1)"])
 
-# --- PRÉPARATION DES DONNÉES ---
-# Fonction pour extraire et consolider une période donnée
-def get_period_data(df, year, month):
-    mask = (df['Date'].dt.year == year) & (df['Date'].dt.month == month)
-    raw_data = df[mask].copy()
-    # On consolide TOUT DE SUITE pour ne plus traîner de doublons caisses
-    return consolidate_registers(raw_data)
-
-# Données Actuelles (Consolidées)
-df_curr = get_period_data(df_horaire, annee_sel, mois_sel)
+# --- PRÉPARATION DONNÉES TEMPORELLES ---
+# Actuel
+df_curr = consolidate_registers(df_horaire[(df_horaire['Date'].dt.year == annee_sel) & (df_horaire['Date'].dt.month == mois_sel)])
 df_act_curr = df_activite[(df_activite['Date'].dt.year == annee_sel) & (df_activite['Date'].dt.month == mois_sel)]
 
-# Calcul dates précédentes
+# M-1
 if mois_sel == 1: prev_m, prev_y_m = 12, annee_sel - 1
 else: prev_m, prev_y_m = mois_sel - 1, annee_sel
+df_m1 = consolidate_registers(df_horaire[(df_horaire['Date'].dt.year == prev_y_m) & (df_horaire['Date'].dt.month == prev_m)])
+df_act_m1 = df_activite[(df_activite['Date'].dt.year == prev_y_m) & (df_activite['Date'].dt.month == prev_m)]
 
-# Données M-1 et N-1 (Consolidées)
-df_m1 = get_period_data(df_horaire, prev_y_m, prev_m)
-df_n1 = get_period_data(df_horaire, annee_sel - 1, mois_sel)
+# N-1
+df_n1 = consolidate_registers(df_horaire[(df_horaire['Date'].dt.year == annee_sel - 1) & (df_horaire['Date'].dt.month == mois_sel)])
+df_act_n1 = df_activite[(df_activite['Date'].dt.year == annee_sel - 1) & (df_activite['Date'].dt.month == mois_sel)]
 
-# --- 3. KPIs ---
+# --- UTILS CALCULS ---
 def calc_evo(curr, prev):
     if prev == 0 or pd.isna(prev): return 0, "neu", "="
     val = ((curr - prev) / prev) * 100
@@ -136,25 +131,13 @@ def calc_evo(curr, prev):
     elif val < 0: return val, "neg", "▼"
     return val, "neu", "="
 
-def kpi_compact(title, val, val_m1, val_n1, unit=""):
-    evo_m, class_m, sym_m = calc_evo(val, val_m1)
-    evo_n, class_n, sym_n = calc_evo(val, val_n1)
-    val_fmt = f"{val:,.0f} {unit}".replace(",", " ")
-    if unit == "€" and val < 100: val_fmt = f"{val:.2f} {unit}"
-    
-    st.markdown(f"""
-    <div class="kpi-box">
-        <p class="kpi-label">{title}</p>
-        <p class="kpi-val">{val_fmt}</p>
-        <div class="kpi-delta">
-            <span style="color:#aaa;">vs M-1:</span> <span class="{class_m}">{sym_m} {abs(evo_m):.1f}%</span>
-            &nbsp;|&nbsp;
-            <span style="color:#aaa;">vs N-1:</span> <span class="{class_n}">{sym_n} {abs(evo_n):.1f}%</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+def fmt_val(val, unit=""):
+    if unit == "€": return f"{val:,.0f} €".replace(",", " ")
+    if unit == "PM": return f"{val:.2f} €"
+    return f"{val:,.0f}".replace(",", " ")
 
-# Calculs sur données consolidées
+# --- 3. LIGNE 1 : KPIs GLOBAUX ---
+st.caption("🌍 Performance Globale")
 ca_c, cli_c = df_curr['CA TTC'].sum(), df_curr['Nombre de clients'].sum()
 pm_c = ca_c/cli_c if cli_c else 0
 
@@ -164,190 +147,229 @@ pm_m1 = ca_m1/cli_m1 if cli_m1 else 0
 ca_n1, cli_n1 = df_n1['CA TTC'].sum(), df_n1['Nombre de clients'].sum()
 pm_n1 = ca_n1/cli_n1 if cli_n1 else 0
 
-# Affichage Ligne 1
+def kpi_global(title, val, val_m1, val_n1, unit=""):
+    e_m, c_m, s_m = calc_evo(val, val_m1)
+    e_n, c_n, s_n = calc_evo(val, val_n1)
+    st.markdown(f"""
+    <div class="kpi-box">
+        <div class="kpi-label">{title}</div>
+        <div class="kpi-val">{fmt_val(val, unit)}</div>
+        <div class="kpi-delta">
+            <span style="color:#aaa;">vs M-1:</span> <span class="{c_m}">{s_m}{abs(e_m):.1f}%</span> |
+            <span style="color:#aaa;">vs N-1:</span> <span class="{c_n}">{s_n}{abs(e_n):.1f}%</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 k1, k2, k3 = st.columns(3)
-with k1: kpi_compact("Chiffre d'Affaires", ca_c, ca_m1, ca_n1, "€")
-with k2: kpi_compact("Fréquentation", cli_c, cli_m1, cli_n1, "")
-with k3: kpi_compact("Panier Moyen", pm_c, pm_m1, pm_n1, "€")
+with k1: kpi_global("Chiffre d'Affaires", ca_c, ca_m1, ca_n1, "€")
+with k2: kpi_global("Fréquentation", cli_c, cli_m1, cli_n1, "")
+with k3: kpi_global("Panier Moyen", pm_c, pm_m1, pm_n1, "PM")
+
+# --- 4. LIGNE 2 : ZOOM ACTIVITÉS (NOUVEAU) ---
+st.caption("🎯 Zoom Activités Clés")
+
+def get_act_stats(df, activity_name):
+    # Logique "Autres" ou Activité précise
+    if activity_name == "Autres":
+        # Tout sauf les 3 gros
+        mask = ~df['ACTIVITE'].isin(['Tabac', 'Jeux', 'Bar Brasserie'])
+        d = df[mask]
+    else:
+        d = df[df['ACTIVITE'] == activity_name]
+    
+    ca = d['CA TTC'].sum()
+    vol = d['Quantité'].sum() # Proxy fréquentation
+    pm = ca / vol if vol > 0 else 0
+    return ca, vol, pm
+
+# Liste des cartes à créer
+activites_target = ["Tabac", "Jeux", "Bar Brasserie", "Autres"]
+cols_act = st.columns(4)
+
+for i, act_name in enumerate(activites_target):
+    with cols_act[i]:
+        # Calculs Current, M-1, N-1
+        ca, vol, pm = get_act_stats(df_act_curr, act_name)
+        ca_m, vol_m, pm_m = get_act_stats(df_act_m1, act_name)
+        ca_n, vol_n, pm_n = get_act_stats(df_act_n1, act_name)
+        
+        # Calcul variations
+        ev_ca_m, cl_ca_m, _ = calc_evo(ca, ca_m)
+        ev_ca_n, cl_ca_n, _ = calc_evo(ca, ca_n)
+        
+        ev_vol_m, cl_vol_m, _ = calc_evo(vol, vol_m)
+        ev_vol_n, cl_vol_n, _ = calc_evo(vol, vol_n)
+        
+        ev_pm_m, cl_pm_m, _ = calc_evo(pm, pm_m)
+        ev_pm_n, cl_pm_n, _ = calc_evo(pm, pm_n)
+        
+        # Icones
+        icon = "🚬" if act_name == "Tabac" else "🎲" if act_name == "Jeux" else "☕" if "Bar" in act_name else "📦"
+
+        # HTML Super Carte
+        st.markdown(f"""
+        <div class="act-card">
+            <div class="act-title">{icon} {act_name}</div>
+            <div class="act-grid">
+                <div>
+                    <div class="act-metric">CA</div>
+                    <div class="act-val">{ca/1000:.1f}k€</div>
+                    <div class="act-delta {cl_ca_m}">M-1 {ev_ca_m:+.0f}%</div>
+                    <div class="act-delta {cl_ca_n}">N-1 {ev_ca_n:+.0f}%</div>
+                </div>
+                <div>
+                    <div class="act-metric">Vol.</div>
+                    <div class="act-val">{vol/1000:.1f}k</div>
+                    <div class="act-delta {cl_vol_m}"> {ev_vol_m:+.0f}%</div>
+                    <div class="act-delta {cl_vol_n}"> {ev_vol_n:+.0f}%</div>
+                </div>
+                <div>
+                    <div class="act-metric">Panier</div>
+                    <div class="act-val">{pm:.1f}€</div>
+                    <div class="act-delta {cl_pm_m}"> {ev_pm_m:+.0f}%</div>
+                    <div class="act-delta {cl_pm_n}"> {ev_pm_n:+.0f}%</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 st.markdown("---")
 
-# --- 4. ANALYSES ---
+# --- 5. ANALYSES GRAPHIQUES ---
 c_left, c_right = st.columns([1, 2])
 
-# A. DONUTS
+# A. JAUGES MATIN/SOIR
 with c_left:
-    st.subheader("🌞 Matin vs Soir")
+    st.subheader("⚖️ Équilibre Matin / Soir")
     if not df_curr.empty:
-        # On recrée l'heure int à partir de la colonne consolidée 'Heure'
         df_curr['Heure_Int'] = df_curr['Heure'].astype(str).str.slice(0, 2).astype(int)
         df_curr['Moment'] = df_curr['Heure_Int'].apply(lambda x: 'Matin' if x < 13 else 'Après-Midi')
         stats = df_curr.groupby('Moment').agg({'CA TTC': 'sum', 'Nombre de clients': 'sum'}).reset_index()
         
-        fig_ca = px.pie(stats, names='Moment', values='CA TTC', hole=0.6, 
-                        color_discrete_sequence=['#29B6F6', '#01579B'], title="Part du CA")
-        fig_ca.update_traces(textinfo='percent+label')
-        fig_ca.update_layout(showlegend=False, margin=dict(t=30, b=0, l=0, r=0), height=180)
-        st.plotly_chart(fig_ca, use_container_width=True)
+        total_ca = stats['CA TTC'].sum()
+        total_cli = stats['Nombre de clients'].sum()
         
-        fig_cli = px.pie(stats, names='Moment', values='Nombre de clients', hole=0.6, 
-                         color_discrete_sequence=['#66BB6A', '#1B5E20'], title="Part Clients")
-        fig_cli.update_traces(textinfo='percent+label')
-        fig_cli.update_layout(showlegend=False, margin=dict(t=30, b=0, l=0, r=0), height=180)
-        st.plotly_chart(fig_cli, use_container_width=True)
+        matin_row = stats[stats['Moment']=='Matin']
+        # Sécurité si 0 matin
+        matin_ca = matin_row['CA TTC'].sum() if not matin_row.empty else 0
+        matin_cli = matin_row['Nombre de clients'].sum() if not matin_row.empty else 0
+        
+        pct_ca_m = (matin_ca / total_ca * 100) if total_ca > 0 else 0
+        pct_cli_m = (matin_cli / total_cli * 100) if total_cli > 0 else 0
+        pct_ca_s, pct_cli_s = 100 - pct_ca_m, 100 - pct_cli_m
+
+        fig = go.Figure()
+        # Barres CA
+        fig.add_trace(go.Bar(y=['CA'], x=[pct_ca_m], name='Matin', orientation='h', marker_color='#29B6F6', 
+                             text=f"Matin<br><b>{pct_ca_m:.0f}%</b>", textposition='inside'))
+        fig.add_trace(go.Bar(y=['CA'], x=[pct_ca_s], name='Soir', orientation='h', marker_color='#01579B', 
+                             text=f"Soir<br><b>{pct_ca_s:.0f}%</b>", textposition='inside'))
+        # Barres Clients
+        fig.add_trace(go.Bar(y=['Freq'], x=[pct_cli_m], name='Matin', orientation='h', marker_color='#66BB6A', 
+                             text=f"Matin<br><b>{pct_cli_m:.0f}%</b>", textposition='inside', showlegend=False))
+        fig.add_trace(go.Bar(y=['Freq'], x=[pct_cli_s], name='Soir', orientation='h', marker_color='#1B5E20', 
+                             text=f"Soir<br><b>{pct_cli_s:.0f}%</b>", textposition='inside', showlegend=False))
+
+        fig.update_layout(barmode='stack', height=200, margin=dict(l=0, r=0, t=10, b=0), showlegend=False,
+                          xaxis=dict(showgrid=False, showticklabels=False), yaxis=dict(tickfont=dict(color='white')),
+                          paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig, use_container_width=True)
 
 # B. CASCADE
 with c_right:
-    # Setup Comparaison
     if "M-1" in waterfall_comp:
-        label_prev = f"{noms_mois[prev_m]} {prev_y_m}"
-        # Pour les activités, on filtre à la main car pas de fonction consolidate (pas de bug caisse ici normalement)
-        df_act_prev = df_activite[(df_activite['Date'].dt.year == prev_y_m) & (df_activite['Date'].dt.month == prev_m)]
-        start_total = ca_m1
+        label_prev = f"{noms_mois[prev_m]} {prev_y_m}"; df_act_prev = df_act_m1; start_total = ca_m1
     else:
-        label_prev = f"{noms_mois[mois_sel]} {annee_sel-1}"
-        df_act_prev = df_activite[(df_activite['Date'].dt.year == annee_sel - 1) & (df_activite['Date'].dt.month == mois_sel)]
-        start_total = ca_n1
-
+        label_prev = f"{noms_mois[mois_sel]} {annee_sel-1}"; df_act_prev = df_act_n1; start_total = ca_n1
     label_curr = f"{noms_mois[mois_sel]} {annee_sel}"
+    
     st.subheader(f"🌉 Pont CA : {label_prev} ➔ {label_curr}")
 
     if not df_act_curr.empty and not df_act_prev.empty:
-        # Résumé haut
         delta_total = ca_c - start_total
         delta_pct = (delta_total / start_total * 100) if start_total > 0 else 0
-        color_delta = "#00FF00" if delta_total >= 0 else "#FF4444"
-        sym_delta = "+" if delta_total >= 0 else ""
-        
-        st.markdown(f"""
-        <div class='bridge-summary'>
-            Variation Globale : <span style='color:{color_delta}'>{sym_delta}{delta_total:,.0f} € ({sym_delta}{delta_pct:.1f}%)</span>
-        </div>
-        """, unsafe_allow_html=True)
+        color = "#00FF00" if delta_total >= 0 else "#FF4444"
+        st.markdown(f"<div class='bridge-summary'>Variation : <span style='color:{color}'>{delta_total:+,.0f} € ({delta_pct:+.1f}%)</span></div>", unsafe_allow_html=True)
 
-        # Calcul Deltas
-        grp_curr = df_act_curr.groupby('ACTIVITE')['CA TTC'].sum()
-        grp_prev = df_act_prev.groupby('ACTIVITE')['CA TTC'].sum()
-        
-        df_bridge = pd.DataFrame({'Actuel': grp_curr, 'Prev': grp_prev}).fillna(0)
-        df_bridge['Delta'] = df_bridge['Actuel'] - df_bridge['Prev']
-        df_bridge['AbsDelta'] = df_bridge['Delta'].abs()
-        df_bridge = df_bridge.sort_values('AbsDelta', ascending=False)
+        grp_c = df_act_curr.groupby('ACTIVITE')['CA TTC'].sum()
+        grp_p = df_act_prev.groupby('ACTIVITE')['CA TTC'].sum()
+        df_b = pd.DataFrame({'Actuel': grp_c, 'Prev': grp_p}).fillna(0)
+        df_b['Delta'] = df_b['Actuel'] - df_b['Prev']
+        df_b['Abs'] = df_b['Delta'].abs()
+        df_b = df_b.sort_values('Abs', ascending=False)
         
         top_n = 6
-        if len(df_bridge) > top_n:
-            main_acts = df_bridge.head(top_n)
-            other_delta = df_bridge.iloc[top_n:]['Delta'].sum()
-            final_deltas = main_acts['Delta'].to_dict()
-            final_deltas['Autres'] = other_delta
+        if len(df_b) > top_n:
+            main = df_b.head(top_n)
+            other = df_b.iloc[top_n:]['Delta'].sum()
+            deltas = main['Delta'].to_dict(); deltas['Autres'] = other
         else:
-            final_deltas = df_bridge['Delta'].to_dict()
+            deltas = df_b['Delta'].to_dict()
 
-        measures = ["absolute"] + ["relative"] * len(final_deltas) + ["absolute"]
-        x_vals = [label_prev] + list(final_deltas.keys()) + [label_curr]
-        y_vals = [start_total] + list(final_deltas.values()) + [ca_c]
-        text_vals = [f"{start_total/1000:.0f}k"] + [f"{v/1000:+.1f}k" for v in final_deltas.values()] + [f"{ca_c/1000:.0f}k"]
+        measures = ["absolute"] + ["relative"] * len(deltas) + ["absolute"]
+        x = [label_prev] + list(deltas.keys()) + [label_curr]
+        y = [start_total] + list(deltas.values()) + [ca_c]
+        text = [f"{start_total/1000:.0f}k"] + [f"{v/1000:+.1f}k" for v in deltas.values()] + [f"{ca_c/1000:.0f}k"]
+        
+        # Scale Auto
+        run = [start_total]; cur = start_total
+        for v in deltas.values(): cur+=v; run.append(cur)
+        max_h = max(run + [ca_c]) * 1.15
 
-        running = [start_total]
-        curr_run = start_total
-        for v in final_deltas.values():
-            curr_run += v
-            running.append(curr_run)
-        max_h = max(running + [ca_c]) * 1.15
-
-        fig_water = go.Figure(go.Waterfall(
-            name="Pont CA", orientation="v",
-            measure=measures, x=x_vals, y=y_vals, text=text_vals, textposition="outside",
-            connector={"mode": "between", "line": {"width": 1, "color": "rgb(63, 63, 63)"}},
-            decreasing={"marker": {"color": "#FF4444"}},
-            increasing={"marker": {"color": "#00C851"}},
-            totals={"marker": {"color": "#33b5e5"}}
+        fig = go.Figure(go.Waterfall(
+            orientation="v", measure=measures, x=x, y=y, text=text, textposition="outside",
+            connector={"mode":"between", "line":{"width":1, "color":"#555"}},
+            decreasing={"marker":{"color":"#FF4444"}}, increasing={"marker":{"color":"#00C851"}}, totals={"marker":{"color":"#33b5e5"}}
         ))
-        fig_water.update_layout(height=350, showlegend=False, yaxis=dict(range=[0, max_h], title="CA TTC (€)"), margin=dict(t=10, r=10))
-        st.plotly_chart(fig_water, use_container_width=True)
+        fig.update_layout(height=350, showlegend=False, yaxis=dict(range=[0, max_h], title="CA TTC"), margin=dict(t=10))
+        st.plotly_chart(fig, use_container_width=True)
     else:
-        st.warning(f"Données manquantes.")
+        st.warning("Données manquantes.")
 
 st.markdown("---")
 
-# --- 5. HEATMAP CORRECTIVE ---
-st.subheader("🔥 Heatmap Hebdomadaire (Fiabilisée)")
-
-c_h1, c_h2 = st.columns([2, 8]) 
-indic = c_h1.selectbox("Indicateur Heatmap", ["CA TTC", "Clients", "Panier"])
-vue = c_h2.selectbox("Type d'analyse", ["Valeur Moyenne", "Évolution vs M-1", "Évolution vs N-1"])
+# --- 6. HEATMAP ---
+st.subheader("🔥 Heatmap Hebdomadaire")
+c1, c2 = st.columns([2, 8])
+indic = c1.selectbox("Indicateur", ["CA TTC", "Clients", "Panier"])
+vue = c2.selectbox("Vue", ["Valeur Moyenne", "Évolution vs M-1", "Évolution vs N-1"])
 
 if not df_curr.empty:
-    days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
     fr_days = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
-    all_hours = sorted(df_horaire['Heure'].unique())
+    all_h = sorted(df_horaire['Heure'].unique())
 
-    def get_hm_data(df_conso, indicator):
-        # NOTE : On reçoit déjà un DF consolidé (df_curr, df_n1, etc.)
-        # On rajoute juste le jour pour le pivot
-        df_conso['Day'] = df_conso['Date'].dt.day_name()
-        
-        if indicator == "Panier":
-            # Moyenne pondérée
-            g = df_conso.groupby(['Day', 'Heure']).agg({'CA TTC':'sum', 'Nombre de clients':'sum'}).reset_index()
+    def get_hm(df_source, ind):
+        df_source['Day'] = df_source['Date'].dt.day_name()
+        if ind == "Panier":
+            g = df_source.groupby(['Day', 'Heure']).agg({'CA TTC':'sum', 'Nombre de clients':'sum'}).reset_index()
             g['Val'] = g['CA TTC'] / g['Nombre de clients']
         else:
-            col = 'CA TTC' if indicator == "CA TTC" else 'Nombre de clients'
-            # Moyenne simple des jours consolidés
-            g = df_conso.groupby(['Day', 'Heure'])[col].mean().reset_index()
+            col = 'CA TTC' if ind == "CA TTC" else 'Nombre de clients'
+            g = df_source.groupby(['Day', 'Heure'])[col].mean().reset_index()
             g.rename(columns={col:'Val'}, inplace=True)
-        
-        pivot = g.pivot(index='Day', columns='Heure', values='Val')
-        pivot = pivot.reindex(index=days_order, columns=all_hours, fill_value=0)
-        return pivot.fillna(0)
+        return g.pivot(index='Day', columns='Heure', values='Val').reindex(index=days, columns=all_h, fill_value=0).fillna(0)
 
-    # Calcul
-    matrix_curr = get_hm_data(df_curr, indic)
-    
-    z_values = matrix_curr.values
-    text_values = np.round(matrix_curr.values).astype(str)
-    colors = "Blues"
-    zmin, zmax = None, None
-    
+    mat_curr = get_hm(df_curr, indic)
+    z, txt, colors, zmin, zmax = mat_curr.values, np.round(mat_curr.values).astype(str), "Blues", None, None
+
     if "Évolution" in vue:
         df_ref = df_m1 if "M-1" in vue else df_n1
         if not df_ref.empty:
-            matrix_ref = get_hm_data(df_ref, indic)
-            
-            curr_vals = matrix_curr.values
-            ref_vals = matrix_ref.values
-            diff_pct = np.zeros(curr_vals.shape)
-            display_text = np.empty(curr_vals.shape, dtype=object)
-            rows, cols = curr_vals.shape
-            
-            for r in range(rows):
-                for c in range(cols):
-                    v_cur = curr_vals[r, c]
-                    v_ref = ref_vals[r, c]
-                    if v_ref == 0 and v_cur == 0:
-                        diff_pct[r, c] = 0; display_text[r, c] = "-"
-                    elif v_ref == 0 and v_cur > 0:
-                        diff_pct[r, c] = 100; display_text[r, c] = "Ouv."
-                    elif v_ref > 0 and v_cur == 0:
-                        diff_pct[r, c] = -100; display_text[r, c] = "Ferm."
-                    else:
-                        pct = ((v_cur - v_ref) / v_ref) * 100
-                        diff_pct[r, c] = pct; display_text[r, c] = f"{pct:+.0f}%"
-
-            z_values = diff_pct
-            text_values = display_text
-            colors = "RdBu"
-            zmin, zmax = -100, 100
-        else:
-            st.warning("Pas de données ref.")
-            z_values[:] = 0; text_values[:] = "-"
-
-    fig_hm = go.Figure(data=go.Heatmap(
-        z=z_values, x=all_hours, y=fr_days,
-        colorscale=colors, zmid=0 if "Évolution" in vue else None,
-        zmin=zmin, zmax=zmax, xgap=2, ygap=2,
-        text=text_values, texttemplate="%{text}",
-        textfont={"size": 10}, hoverongaps=False, showscale=False
-    ))
-    fig_hm.update_layout(height=350, margin=dict(l=0, r=0, t=0, b=0), yaxis_autorange='reversed', paper_bgcolor='rgba(0,0,0,0)')
-    st.plotly_chart(fig_hm, use_container_width=True)
+            mat_ref = get_hm(df_ref, indic)
+            c_v, r_v = mat_curr.values, mat_ref.values
+            d_pct = np.zeros(c_v.shape); d_txt = np.empty(c_v.shape, dtype=object)
+            for r in range(c_v.shape[0]):
+                for c in range(c_v.shape[1]):
+                    vc, vr = c_v[r,c], r_v[r,c]
+                    if vr==0 and vc==0: d_pct[r,c]=0; d_txt[r,c]="-"
+                    elif vr==0: d_pct[r,c]=100; d_txt[r,c]="Ouv."
+                    elif vc==0: d_pct[r,c]=-100; d_txt[r,c]="Ferm."
+                    else: p=((vc-vr)/vr)*100; d_pct[r,c]=p; d_txt[r,c]=f"{p:+.0f}%"
+            z, txt, colors, zmin, zmax = d_pct, d_txt, "RdBu", -100, 100
+    
+    fig = go.Figure(go.Heatmap(z=z, x=all_h, y=fr_days, colorscale=colors, zmin=zmin, zmax=zmax, zmid=0 if zmin else None,
+                               xgap=2, ygap=2, text=txt, texttemplate="%{text}", textfont={"size":10}, showscale=False))
+    fig.update_layout(height=350, margin=dict(l=0, r=0, t=0, b=0), yaxis_autorange='reversed', paper_bgcolor='rgba(0,0,0,0)')
+    st.plotly_chart(fig, use_container_width=True)
