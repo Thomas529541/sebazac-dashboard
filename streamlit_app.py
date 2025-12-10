@@ -5,16 +5,53 @@ import plotly.graph_objects as go
 import numpy as np
 from datetime import timedelta
 
-# --- CONFIGURATION PAGE & CSS ---
-st.set_page_config(page_title="Pilotage Mobile Ready", layout="wide", page_icon="📱")
+# --- CONFIGURATION PAGE ---
+st.set_page_config(page_title="Pilotage Commerce V8", layout="wide", page_icon="🔐")
 
+# ==============================================================================
+# 🔐 SÉCURITÉ : LE PORTIER (Doit être au tout début)
+# ==============================================================================
+def check_password():
+    """Retourne True si le mot de passe est bon."""
+    
+    # 1. Vérification configuration
+    if "password" not in st.secrets:
+        st.error("⚠️ Le mot de passe n'est pas configuré dans les Secrets Streamlit.")
+        st.info("Ajoutez une ligne : password = 'votre_mot_de_passe' dans les settings.")
+        return False
+
+    def password_entered():
+        """Vérifie si le mot de passe saisi correspond."""
+        if st.session_state["password"] == st.secrets["password"]:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # Sécurité : on efface le mdp de la mémoire
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        # Premier chargement
+        st.text_input("🔒 Mot de passe requis", type="password", on_change=password_entered, key="password")
+        return False
+    
+    elif not st.session_state["password_correct"]:
+        # Mot de passe faux
+        st.text_input("🔒 Mot de passe requis", type="password", on_change=password_entered, key="password")
+        st.error("😕 Mot de passe incorrect")
+        return False
+    
+    else:
+        # Mot de passe bon
+        return True
+
+if not check_password():
+    st.stop()  # 🛑 ARRÊT IMMÉDIAT SI PAS CONNECTÉ
+
+# ==============================================================================
+# 🎨 CSS & DESIGN (Mobile Ready)
+# ==============================================================================
 st.markdown("""
 <style>
-    /* ====================================================================
-       1. GESTION ROBUSTE DU MENU (PC vs MOBILE)
-       ==================================================================== */
-    
-    /* PARTIE PC (Ecrans > 992px) : On cache la barre blanche pour le look "App" */
+    /* GESTION DU MENU ET DES MARGES (PC vs MOBILE) */
     @media (min-width: 993px) {
         header { visibility: hidden; }
         #MainMenu { visibility: hidden; }
@@ -25,31 +62,11 @@ st.markdown("""
             margin-top: 0rem !important;
         }
     }
-
-    /* PARTIE MOBILE (Ecrans < 992px) : On FORCE l'affichage du menu hamburger */
     @media (max-width: 992px) {
-        header { 
-            visibility: visible !important; 
-            background: transparent !important; 
-        }
-        /* On s'assure que le bouton est au-dessus de tout (Z-Index élevé) */
-        [data-testid="stHeader"] {
-            visibility: visible !important;
-            z-index: 99999 !important;
-            background-color: rgba(0,0,0,0) !important; /* Transparent */
-        }
-        /* On pousse le contenu vers le bas pour ne pas qu'il soit caché sous le bouton */
-        .block-container {
-            padding-top: 4rem !important; 
-            margin-top: 0rem !important;
-        }
-        /* On réduit un peu la taille des titres sur mobile pour que ça rentre */
-        h1 { font-size: 1.8rem !important; }
+        header { visibility: visible !important; background: transparent !important; }
+        [data-testid="stHeader"] { visibility: visible !important; z-index: 99999 !important; background-color: rgba(0,0,0,0) !important; }
+        .block-container { padding-top: 4rem !important; margin-top: 0rem !important; }
     }
-
-    /* ====================================================================
-       2. DESIGN SYSTEM (KPIS, CARTES, COULEURS)
-       ==================================================================== */
     
     /* KPI GLOBAL CENTRÉ */
     .kpi-container {
@@ -61,7 +78,7 @@ st.markdown("""
     .kpi-value { font-size: 28px; font-weight: bold; color: white; margin: 5px 0; }
     .kpi-sub { font-size: 13px; margin-top: 5px; display: flex; justify-content: center; gap: 15px; }
     
-    /* CARTES DÉTAIL (Matin/Soir/Familles) */
+    /* CARTES DÉTAIL */
     .detail-card {
         background-color: #1E1E1E; border-radius: 8px; padding: 12px;
         border: 1px solid #333; margin-bottom: 10px;
@@ -71,15 +88,12 @@ st.markdown("""
         font-size: 16px; font-weight: bold; color: #FFD700;
         display: flex; justify-content: space-between;
     }
-    .detail-grid {
-        display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px;
-        text-align: center;
-    }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; text-align: center; }
     .metric-label { font-size: 11px; color: #888; text-transform: uppercase; }
     .metric-val { font-size: 15px; font-weight: bold; color: white; margin: 2px 0; }
     .metric-delta { font-size: 10px; }
     
-    /* KPIS OPERATIONNELS (Focus Jour) */
+    /* KPIS OPERATIONNELS */
     .op-kpi-box {
         background-color: #383838; padding: 15px; border-radius: 8px; 
         margin-bottom: 10px; text-align: center; border: 1px solid #555;
@@ -536,7 +550,6 @@ elif page == "📈 Tendances & Familles":
         def plot_trend(col, title, y_col, color):
             avg = monthly[y_col].mean()
             fig = px.line(monthly, x='Mois', y=y_col, title=title, markers=True, text=y_col)
-            # COULEUR #555 pour visibilité sur light/dark
             fig.update_traces(line_color=color, textposition="top center", texttemplate='%{text:.0f}')
             fig.add_hline(y=avg, line_dash="dot", line_color="#555", annotation_text="Moyenne")
             col.plotly_chart(fig, use_container_width=True)
