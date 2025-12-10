@@ -274,6 +274,8 @@ if page == "🏠 Synthèse Mensuelle":
             ))
             fig.update_layout(height=400, showlegend=False, yaxis=dict(range=[0, max_h], title="CA TTC"), margin=dict(t=20))
             st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("Données manquantes.")
 
     st.markdown("---")
 
@@ -552,3 +554,6 @@ elif page == "📈 Tendances & Familles":
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
+                
+    else:
+        st.info("Données Familles non disponibles.")
