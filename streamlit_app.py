@@ -6,7 +6,7 @@ import numpy as np
 from datetime import timedelta
 
 # --- CONFIGURATION PAGE & CSS ---
-st.set_page_config(page_title="Pilotage Commerce V9", layout="wide", page_icon="🎯")
+st.set_page_config(page_title="Pilotage Commerce V12", layout="wide", page_icon="🎯")
 
 st.markdown("""
 <style>
@@ -20,11 +20,10 @@ st.markdown("""
         margin-top: 0rem !important;
     }
     
-    /* KPI GLOBAL STYLES (CENTRÉ) */
+    /* KPI GLOBAL STYLES */
     .kpi-container {
         background-color: #262730; border-radius: 8px; padding: 15px;
-        border-left: 5px solid #FF4B4B; margin-bottom: 10px;
-        text-align: center;
+        border-left: 5px solid #FF4B4B; margin-bottom: 10px; text-align: center;
     }
     .kpi-title { font-size: 14px; color: #bbb; font-weight: 500; }
     .kpi-value { font-size: 28px; font-weight: bold; color: white; margin: 5px 0; }
@@ -40,10 +39,7 @@ st.markdown("""
         font-size: 16px; font-weight: bold; color: #FFD700;
         display: flex; justify-content: space-between;
     }
-    .detail-grid {
-        display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px;
-        text-align: center;
-    }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; text-align: center; }
     .metric-label { font-size: 11px; color: #888; text-transform: uppercase; }
     .metric-val { font-size: 15px; font-weight: bold; color: white; margin: 2px 0; }
     .metric-delta { font-size: 10px; }
@@ -57,23 +53,13 @@ st.markdown("""
     .op-kpi-val { color: #fff; font-size: 24px; font-weight: bold; }
     .op-kpi-bench { color: #aaa; font-size: 14px; margin-top: 5px; font-weight: 500; }
 
-    /* ALERTES */
-    .smart-alert {
-        background-color: #2b3e50; color: #e0e0e0; padding: 15px; border-radius: 8px;
-        border-left: 5px solid #00C851; margin-bottom: 15px; font-size: 15px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-    }
-    .smart-alert-warn {
-        background-color: #3e2b2b; color: #e0e0e0; padding: 15px; border-radius: 8px;
-        border-left: 5px solid #FF4444; margin-bottom: 15px; font-size: 15px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    /* INDICATEUR MOYENNE */
+    .avg-indicator {
+        text-align: center; font-size: 13px; color: #aaa; 
+        background-color: #252525; padding: 5px; border-radius: 5px; margin-top: -10px; margin-bottom: 10px;
     }
 
-    /* CAPTION FOOTER */
-    .footer-caption {
-        text-align: center; color: #666; font-size: 12px; margin-top: 30px; font-style: italic;
-    }
-
+    /* COULEURS */
     .pos { color: #00FF00; }
     .neg { color: #FF4444; }
     .neu { color: #888888; }
@@ -282,7 +268,7 @@ if page == "🏠 Synthèse Mensuelle":
 
     st.markdown("---")
 
-    # 3. HEATMAP
+    # 3. HEATMAP & HIGHLIGHTS
     st.subheader("🔥 Heatmap Hebdomadaire & Highlights")
     
     if not df_curr.empty and not df_n1.empty:
@@ -388,7 +374,8 @@ elif page == "📅 Focus Jour & Semaine":
         df_b = df_b_raw[df_b_raw['D'] == target]
         norm = max(1, df_b['Date'].nunique())
     else:
-        df_b = df_b_raw; norm = 8
+        df_b = df_b_raw
+        norm = max(1, df_b['Date'].dt.to_period('W').nunique())
 
     if not df_f.empty:
         ca_f = df_f['CA TTC'].sum(); ca_b = df_b['CA TTC'].sum()/norm
@@ -406,7 +393,6 @@ elif page == "📅 Focus Jour & Semaine":
                 <div class="op-kpi-bench" style="color:{color}">Habitude : {fmt_val(bench, unit)} ({diff:+.0f})</div>
             </div>
             """, unsafe_allow_html=True)
-            
         op_kpi(c1, "Chiffre d'Affaires", ca_f, ca_b, "€")
         op_kpi(c2, "Fréquentation", cli_f, cli_b, "")
         op_kpi(c3, "Panier Moyen", pm_f, pm_b, "PM")
@@ -435,8 +421,7 @@ elif page == "📅 Focus Jour & Semaine":
             x=chart_d[x_col], y=chart_d['CA TTC'], mode='lines+markers+text', name='Actuel',
             line=dict(color='#FFD700', width=4),
             text=[f"{v:,.0f}".replace(",", " ") for v in chart_d['CA TTC']],
-            textposition="top center", 
-            textfont=dict(size=13, weight='bold')
+            textposition="top center", textfont=dict(size=13, weight='bold')
         ))
         fig.add_trace(go.Scatter(
             x=chart_b[x_col], y=chart_b['CA TTC'], mode='lines', name='Habitude (Moy)',
@@ -450,41 +435,37 @@ elif page == "📅 Focus Jour & Semaine":
             t = df_f.groupby('Heure').agg(CA=('CA TTC','sum'), Cli=('Nombre de clients','sum')).reset_index()
             b = df_b.groupby('Heure').agg(CA_B=('CA TTC','mean'), Cli_B=('Nombre de clients','mean')).reset_index()
             t = t.merge(b, on='Heure', how='left')
-            disp_col = 'Heure'
+            col_disp = 'Heure'
         else:
             t = df_f.groupby('Date').agg(CA=('CA TTC','sum'), Cli=('Nombre de clients','sum')).reset_index()
-            # MAPPING JOURS POUR LE TABLEAU
             fr_days_map = {'Monday':'Lundi','Tuesday':'Mardi','Wednesday':'Mercredi','Thursday':'Jeudi','Friday':'Vendredi','Saturday':'Samedi','Sunday':'Dimanche'}
             t['DayName'] = t['Date'].dt.day_name().map(fr_days_map)
             t['DateStr'] = t['Date'].dt.strftime('%d/%m')
             t['Label'] = t['DayName'] + " " + t['DateStr']
             
-            # Bench par jour de semaine pour la semaine
             df_b['D_Name'] = df_b['Date'].dt.day_name()
-            b_day = df_b.groupby('D_Name').agg(CA_B=('CA TTC','mean'), Cli_B=('Nombre de clients','mean'))/ (norm/8 if norm>1 else 1) # Approx bench weekly avg per day
-            # Pour simplifier, on recalcule le bench exact par nom de jour
-            b_clean = df_b.groupby('D')['CA TTC'].sum().reset_index() # Déjà normé plus haut dans chart_b
+            bench_daily = df_b.groupby('D_Name').agg(CA_B=('CA TTC','sum'), Cli_B=('Nombre de clients','sum')).reset_index()
+            bench_daily['CA_B'] = bench_daily['CA_B'] / norm
+            bench_daily['Cli_B'] = bench_daily['Cli_B'] / norm
             
-            # Merge complexe par jour, on simplifie pour l'affichage en mettant 0 diff si compliqué
-            t['CA_B'] = 0; t['Cli_B'] = 0
-            disp_col = 'Label'
+            t['D_Name'] = t['Date'].dt.day_name()
+            t = t.merge(bench_daily, on='D_Name', how='left')
+            col_disp = 'Label'
 
-        t['PM'] = t['CA']/t['Cli']; 
-        # Gestion division par zero
-        t['PM_B'] = t.apply(lambda row: row['CA_B']/row['Cli_B'] if row['Cli_B']>0 else 0, axis=1)
-        
+        t['PM'] = t['CA']/t['Cli']
+        t['PM_B'] = t.apply(lambda r: r['CA_B']/r['Cli_B'] if r['Cli_B']>0 else 0, axis=1)
         t['Diff CA'] = t['CA'] - t['CA_B']
         t['Diff Cli'] = t['Cli'] - t['Cli_B']
         t['Diff PM'] = t['PM'] - t['PM_B']
         
         disp = pd.DataFrame()
-        disp['Créneau'] = t[disp_col]
+        disp['Créneau'] = t[col_disp]
         disp['CA'] = t['CA'].apply(lambda x: f"{x:,.0f} €".replace(","," "))
-        disp['Diff CA'] = t['Diff CA'].apply(lambda x: f"{x:+,.0f} €".replace(","," ")) if view_mode=="Journée" else "-"
+        disp['Diff CA'] = t['Diff CA'].apply(lambda x: f"{x:+,.0f} €".replace(","," "))
         disp['Freq'] = t['Cli'].apply(lambda x: f"{x:.0f}")
-        disp['Diff Freq'] = t['Diff Cli'].apply(lambda x: f"{x:+.0f}") if view_mode=="Journée" else "-"
+        disp['Diff Freq'] = t['Diff Cli'].apply(lambda x: f"{x:+.0f}")
         disp['Panier'] = t['PM'].apply(lambda x: f"{x:.2f} €")
-        disp['Diff PM'] = t['Diff PM'].apply(lambda x: f"{x:+.2f} €") if view_mode=="Journée" else "-"
+        disp['Diff PM'] = t['Diff PM'].apply(lambda x: f"{x:+.2f} €")
         
         row_tot = {
             'Créneau': 'TOTAL', 
@@ -493,17 +474,98 @@ elif page == "📅 Focus Jour & Semaine":
             'Panier': f"{t['CA'].sum()/t['Cli'].sum():.2f} €", 'Diff PM': "-"
         }
         disp = pd.concat([disp, pd.DataFrame([row_tot])], ignore_index=True)
-        
         def style_rows(row):
             if row['Créneau'] == 'TOTAL': return ['background-color: #444; color: white; font-weight: bold'] * len(row)
             return [''] * len(row)
-            
         st.dataframe(disp.style.apply(style_rows, axis=1), use_container_width=True, hide_index=True)
+        st.markdown("<div class='footer-caption'>ℹ️ Les habitudes sont calculées sur la moyenne des 8 dernières semaines disponibles avant la période sélectionnée.</div>", unsafe_allow_html=True)
+
+    # --- D. TOP & FLOP ACTIVITÉS ---
+    if not df_f.empty:
+        st.markdown("---")
+        st.subheader("🔍 Performance par Activité & Famille")
         
-        st.markdown("<div class='footer-caption'>ℹ️ Les habitudes sont calculées sur la moyenne des 8 dernières semaines équivalentes.</div>", unsafe_allow_html=True)
+        mask_act_f = (df_activite['Date'] >= start_date) & (df_activite['Date'] <= end_date)
+        df_af = df_activite[mask_act_f]
+        
+        mask_act_b = (df_activite['Date'] >= bench_start) & (df_activite['Date'] < start_date)
+        df_ab_raw = df_activite[mask_act_b].copy()
+        
+        if view_mode == "Journée":
+            target = date_focus.day_name()
+            df_ab_raw['D'] = df_ab_raw['Date'].dt.day_name()
+            df_ab = df_ab_raw[df_ab_raw['D'] == target]
+        else:
+            df_ab = df_ab_raw
+            
+        act_f = df_af.groupby('ACTIVITE').agg(CA=('CA TTC','sum'), Qty=('Quantité','sum'))
+        act_b = df_ab.groupby('ACTIVITE').agg(CA=('CA TTC','sum'), Qty=('Quantité','sum')) / norm
+        
+        act_res = act_f.join(act_b, lsuffix='_F', rsuffix='_B').fillna(0)
+        act_res['Diff CA'] = act_res['CA_F'] - act_res['CA_B']
+        act_res['PM_F'] = act_res['CA_F'] / act_res['Qty_F']
+        
+        top_acts = act_res[act_res['Diff CA'] >= 0].sort_values('Diff CA', ascending=False)
+        flop_acts = act_res[act_res['Diff CA'] < 0].sort_values('Diff CA', ascending=True)
+        
+        # LOGIQUE FAMILLES BENCHMARK
+        mask_fam_f = (df_famille['Date'] >= start_date) & (df_famille['Date'] <= end_date)
+        df_ff = df_famille[mask_fam_f]
+        
+        mask_fam_b = (df_famille['Date'] >= bench_start) & (df_famille['Date'] < start_date)
+        df_fb_raw = df_famille[mask_fam_b].copy()
+        
+        if view_mode == "Journée":
+            df_fb_raw['D'] = df_fb_raw['Date'].dt.day_name()
+            df_fb = df_fb_raw[df_fb_raw['D'] == target]
+        else:
+            df_fb = df_fb_raw
+            
+        # On calcule le diff pour toutes les familles d'un coup
+        fam_f = df_ff.groupby('FAMILLE')['CA TTC'].sum()
+        fam_b = df_fb.groupby('FAMILLE')['CA TTC'].sum() / norm
+        fam_res = pd.DataFrame({'CA_F': fam_f, 'CA_B': fam_b}).fillna(0)
+        fam_res['Diff'] = fam_res['CA_F'] - fam_res['CA_B']
+
+        def display_activity_group(df_acts, title, color_header):
+            st.markdown(f"<h4 style='color:{color_header}'>{title}</h4>", unsafe_allow_html=True)
+            for act_name, row in df_acts.iterrows():
+                diff_ca = row['Diff CA']
+                label = f"{act_name} : {row['CA_F']:,.0f}€ ({diff_ca:+,.0f}€)"
+                
+                with st.expander(label):
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("CA", f"{row['CA_F']:,.0f}€", f"{diff_ca:+,.0f}€")
+                    diff_q = row['Qty_F'] - row['Qty_B']
+                    c2.metric("Fréquentation", f"{row['Qty_F']:.0f}", f"{diff_q:+.0f}")
+                    pm_b = row['CA_B']/row['Qty_B'] if row['Qty_B']>0 else 0
+                    diff_pm = row['PM_F'] - pm_b
+                    c3.metric("Panier", f"{row['PM_F']:.2f}€", f"{diff_pm:+.2f}€")
+                    
+                    # DRILL DOWN FAMILLES : On essaie de deviner les familles associées à l'activité
+                    # Comme on n'a pas de lien direct, on va filtrer les familles qui contiennent le nom de l'activité
+                    # OU MIEUX : On affiche juste les familles qui ont eu un mouvement significatif et dont le nom
+                    # n'est pas aberrant. C'est une approximation faute de mapping.
+                    # Pour faire propre : On affiche le TOP 5 FAMILLES GLOBALES en variation
+                    # Mais ici on est DANS l'activité.
+                    
+                    st.caption("Détail familles non disponible par activité (données brutes sans lien hiérarchique).")
+
+        c_top, c_flop = st.columns(2)
+        with c_top: display_activity_group(top_acts, "🟢 Activités en Hausse", "#00C851")
+        with c_flop: display_activity_group(flop_acts, "🔴 Activités en Baisse", "#FF4444")
+            
+        if not fam_res.empty:
+            st.markdown("---")
+            st.write(" **Zoom Familles (Top Variations Globales)**")
+            top_fam = fam_res.sort_values('Diff', ascending=False).head(5)
+            bot_fam = fam_res.sort_values('Diff', ascending=True).head(5)
+            c1, c2 = st.columns(2)
+            c1.dataframe(top_fam[['CA_F', 'Diff']].style.format("{:,.0f}€"), use_container_width=True)
+            c2.dataframe(bot_fam[['CA_F', 'Diff']].style.format("{:,.0f}€"), use_container_width=True)
 
 # ==============================================================================
-# PAGE 3 : TENDANCES & FAMILLES
+# PAGE 3 : TENDANCES
 # ==============================================================================
 elif page == "📈 Tendances & Familles":
     st.sidebar.header("Filtres")
@@ -511,16 +573,30 @@ elif page == "📈 Tendances & Familles":
     date_end = pd.to_datetime(date_end)
     date_start = date_end - pd.DateOffset(months=12)
     
-    # 1. TENDANCE 12 MOIS
     mask_12m = (df_horaire['Date'] > date_start) & (df_horaire['Date'] <= date_end)
     df_12m = consolidate_registers(df_horaire[mask_12m])
     
     st.title("📈 Tendances & Familles")
     
     if not df_12m.empty:
+        # SELECTEUR VUE MOYENNE
+        view_type = st.radio("Affichage Historique :", ["Valeurs Totales", "Moyenne Journalière"], horizontal=True)
+        
         df_12m['Mois'] = df_12m['Date'].dt.to_period('M').astype(str)
-        monthly = df_12m.groupby('Mois').agg({'CA TTC':'sum', 'Nombre de clients':'sum'}).reset_index()
-        monthly['Panier'] = monthly['CA TTC'] / monthly['Nombre de clients']
+        # On compte les jours d'ouverture réels par mois
+        monthly = df_12m.groupby('Mois').agg({'CA TTC':'sum', 'Nombre de clients':'sum', 'Date':'nunique'}).rename(columns={'Date':'NbJours'}).reset_index()
+        
+        # LOGIQUE BASCULE
+        if view_type == "Moyenne Journalière":
+            monthly['CA_Graph'] = monthly['CA TTC'] / monthly['NbJours']
+            monthly['Cli_Graph'] = monthly['Nombre de clients'] / monthly['NbJours']
+            prefix = "Moy. Jour "
+        else:
+            monthly['CA_Graph'] = monthly['CA TTC']
+            monthly['Cli_Graph'] = monthly['Nombre de clients']
+            prefix = "Total "
+            
+        monthly['Panier'] = monthly['CA TTC'] / monthly['Nombre de clients'] # Panier ne change pas
         
         st.subheader("Historique 12 Mois")
         c1, c2, c3 = st.columns(3)
@@ -530,13 +606,14 @@ elif page == "📈 Tendances & Familles":
             fig.update_traces(line_color=color, textposition="top center", texttemplate='%{text:.0f}')
             fig.add_hline(y=avg, line_dash="dot", line_color="#555", annotation_text="Moy")
             col.plotly_chart(fig, use_container_width=True)
-        plot_trend(c1, "Chiffre d'Affaires", 'CA TTC', '#FFD700')
-        plot_trend(c2, "Fréquentation", 'Nombre de clients', '#00C851')
+            col.markdown(f"<div class='avg-indicator'>Moyenne : {avg:,.0f}</div>", unsafe_allow_html=True)
+            
+        plot_trend(c1, f"{prefix}CA", 'CA_Graph', '#FFD700')
+        plot_trend(c2, f"{prefix}Fréq", 'Cli_Graph', '#00C851')
         plot_trend(c3, "Panier Moyen", 'Panier', '#29B6F6')
         
         st.markdown("---")
         
-        # 2. ZOOM QUOTIDIEN DU MOIS
         st.subheader(f"🔍 Zoom Quotidien : {date_end.strftime('%B %Y')}")
         mask_month = (df_horaire['Date'].dt.month == date_end.month) & (df_horaire['Date'].dt.year == date_end.year)
         df_daily = consolidate_registers(df_horaire[mask_month])
@@ -549,20 +626,19 @@ elif page == "📈 Tendances & Familles":
             d1, d2, d3 = st.columns(3)
             def plot_daily(col, title, y_col, color):
                 avg = daily_stats[y_col].mean()
-                fig = px.line(daily_stats, x='Jour', y=y_col, title=title, markers=True)
-                fig.update_traces(line_color=color)
+                fig = px.line(daily_stats, x='Jour', y=y_col, title=title, markers=True, text=y_col)
+                fig.update_traces(line_color=color, textposition="top center", texttemplate='%{text:.0f}')
                 fig.add_hline(y=avg, line_dash="dot", line_color="#555", annotation_text="Moy")
                 col.plotly_chart(fig, use_container_width=True)
+                col.markdown(f"<div class='avg-indicator'>Moyenne : {avg:,.0f}</div>", unsafe_allow_html=True)
             
             plot_daily(d1, "CA Journalier", 'CA TTC', '#FFD700')
             plot_daily(d2, "Fréq Journalière", 'Nombre de clients', '#00C851')
             plot_daily(d3, "Panier Journalier", 'Panier', '#29B6F6')
-        else:
-            st.warning("Pas de données pour ce mois précis.")
+        else: st.warning("Pas de données pour ce mois précis.")
 
         st.markdown("---")
         
-        # 3. MIX ACTIVITÉS
         c_mix1, c_mix2 = st.columns(2)
         mask_act = (df_activite['Date'] > date_start) & (df_activite['Date'] <= date_end)
         df_act_12m = df_activite[mask_act].copy()
@@ -584,30 +660,24 @@ elif page == "📈 Tendances & Familles":
     st.subheader("🔍 Performance Familles (Top 10)")
     
     if not df_famille.empty:
-        # LOGIQUE CALENDRAIRE STRICTE POUR FAMILLES
         sel_m = date_end.month; sel_y = date_end.year
         
-        # CURR (Mois sélectionné)
         mask_c = (df_famille['Date'].dt.month == sel_m) & (df_famille['Date'].dt.year == sel_y)
         f_curr = df_famille[mask_c].groupby('FAMILLE').agg({'CA TTC':'sum', 'Quantité':'sum'})
         f_curr['PM'] = f_curr['CA TTC']/f_curr['Quantité']
         
-        # PREV M-1
         prev_date = date_end - pd.DateOffset(months=1)
         prev_m = prev_date.month; prev_my = prev_date.year
         mask_pm = (df_famille['Date'].dt.month == prev_m) & (df_famille['Date'].dt.year == prev_my)
-        f_m1 = df_famille[mask_pm].groupby('FAMILLE')['CA TTC'].sum()
+        f_m1 = df_famille[mask_pm].groupby('FAMILLE')['CA TTC'].sum() if not df_famille[mask_pm].empty else pd.Series(dtype=float)
         
-        # PREV N-1
         mask_pn = (df_famille['Date'].dt.month == sel_m) & (df_famille['Date'].dt.year == sel_y - 1)
-        f_n1 = df_famille[mask_pn].groupby('FAMILLE')['CA TTC'].sum()
+        f_n1 = df_famille[mask_pn].groupby('FAMILLE')['CA TTC'].sum() if not df_famille[mask_pn].empty else pd.Series(dtype=float)
         
-        # Assemblage
         df_r = f_curr.copy().sort_values('CA TTC', ascending=False).head(10)
         df_r['CA M-1'] = f_m1
         df_r['CA N-1'] = f_n1
         
-        # Calcul Evos
         df_r['Evo M-1'] = ((df_r['CA TTC'] - df_r['CA M-1'])/df_r['CA M-1']*100).fillna(0)
         df_r['Evo N-1'] = ((df_r['CA TTC'] - df_r['CA N-1'])/df_r['CA N-1']*100).fillna(0)
         
@@ -626,6 +696,5 @@ elif page == "📈 Tendances & Familles":
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-                
     else:
         st.info("Données Familles non disponibles.")
