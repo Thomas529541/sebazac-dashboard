@@ -5,70 +5,22 @@ import plotly.graph_objects as go
 import numpy as np
 from datetime import timedelta
 
-# --- CONFIGURATION PAGE ---
-st.set_page_config(page_title="Pilotage Commerce V8", layout="wide", page_icon="🔐")
+# --- CONFIGURATION PAGE & CSS ---
+st.set_page_config(page_title="Pilotage Commerce V9", layout="wide", page_icon="🎯")
 
-# ==============================================================================
-# 🔐 SÉCURITÉ : LE PORTIER (Doit être au tout début)
-# ==============================================================================
-def check_password():
-    """Retourne True si le mot de passe est bon."""
-    
-    # 1. Vérification configuration
-    if "password" not in st.secrets:
-        st.error("⚠️ Le mot de passe n'est pas configuré dans les Secrets Streamlit.")
-        st.info("Ajoutez une ligne : password = 'votre_mot_de_passe' dans les settings.")
-        return False
-
-    def password_entered():
-        """Vérifie si le mot de passe saisi correspond."""
-        if st.session_state["password"] == st.secrets["password"]:
-            st.session_state["password_correct"] = True
-            del st.session_state["password"]  # Sécurité : on efface le mdp de la mémoire
-        else:
-            st.session_state["password_correct"] = False
-
-    if "password_correct" not in st.session_state:
-        # Premier chargement
-        st.text_input("🔒 Mot de passe requis", type="password", on_change=password_entered, key="password")
-        return False
-    
-    elif not st.session_state["password_correct"]:
-        # Mot de passe faux
-        st.text_input("🔒 Mot de passe requis", type="password", on_change=password_entered, key="password")
-        st.error("😕 Mot de passe incorrect")
-        return False
-    
-    else:
-        # Mot de passe bon
-        return True
-
-if not check_password():
-    st.stop()  # 🛑 ARRÊT IMMÉDIAT SI PAS CONNECTÉ
-
-# ==============================================================================
-# 🎨 CSS & DESIGN (Mobile Ready)
-# ==============================================================================
 st.markdown("""
 <style>
-    /* GESTION DU MENU ET DES MARGES (PC vs MOBILE) */
-    @media (min-width: 993px) {
-        header { visibility: hidden; }
-        #MainMenu { visibility: hidden; }
-        footer { visibility: hidden; }
-        .block-container {
-            padding-top: 1rem !important;
-            padding-bottom: 3rem !important;
-            margin-top: 0rem !important;
-        }
-    }
-    @media (max-width: 992px) {
-        header { visibility: visible !important; background: transparent !important; }
-        [data-testid="stHeader"] { visibility: visible !important; z-index: 99999 !important; background-color: rgba(0,0,0,0) !important; }
-        .block-container { padding-top: 4rem !important; margin-top: 0rem !important; }
+    /* RESET ET MARGES */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 3rem !important;
+        margin-top: 0rem !important;
     }
     
-    /* KPI GLOBAL CENTRÉ */
+    /* KPI GLOBAL STYLES (CENTRÉ) */
     .kpi-container {
         background-color: #262730; border-radius: 8px; padding: 15px;
         border-left: 5px solid #FF4B4B; margin-bottom: 10px;
@@ -78,7 +30,7 @@ st.markdown("""
     .kpi-value { font-size: 28px; font-weight: bold; color: white; margin: 5px 0; }
     .kpi-sub { font-size: 13px; margin-top: 5px; display: flex; justify-content: center; gap: 15px; }
     
-    /* CARTES DÉTAIL */
+    /* CARTES DÉTAILLÉES */
     .detail-card {
         background-color: #1E1E1E; border-radius: 8px; padding: 12px;
         border: 1px solid #333; margin-bottom: 10px;
@@ -88,7 +40,10 @@ st.markdown("""
         font-size: 16px; font-weight: bold; color: #FFD700;
         display: flex; justify-content: space-between;
     }
-    .detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; text-align: center; }
+    .detail-grid {
+        display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px;
+        text-align: center;
+    }
     .metric-label { font-size: 11px; color: #888; text-transform: uppercase; }
     .metric-val { font-size: 15px; font-weight: bold; color: white; margin: 2px 0; }
     .metric-delta { font-size: 10px; }
@@ -112,6 +67,11 @@ st.markdown("""
         background-color: #3e2b2b; color: #e0e0e0; padding: 15px; border-radius: 8px;
         border-left: 5px solid #FF4444; margin-bottom: 15px; font-size: 15px;
         box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+
+    /* CAPTION FOOTER */
+    .footer-caption {
+        text-align: center; color: #666; font-size: 12px; margin-top: 30px; font-style: italic;
     }
 
     .pos { color: #00FF00; }
@@ -322,31 +282,25 @@ if page == "🏠 Synthèse Mensuelle":
 
     st.markdown("---")
 
-    # 3. HEATMAP & HIGHLIGHTS
+    # 3. HEATMAP
     st.subheader("🔥 Heatmap Hebdomadaire & Highlights")
     
     if not df_curr.empty and not df_n1.empty:
         df_curr['Day'] = df_curr['Date'].dt.day_name()
         df_n1['Day'] = df_n1['Date'].dt.day_name()
-        
         stats_curr = df_curr.groupby('Day')['CA TTC'].mean()
         stats_n1 = df_n1.groupby('Day')['CA TTC'].mean()
-        
         fr_map = {'Monday':'Lundi','Tuesday':'Mardi','Wednesday':'Mercredi','Thursday':'Jeudi','Friday':'Vendredi','Saturday':'Samedi','Sunday':'Dimanche'}
         days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-        
         deltas = {}
         for d in days_order:
             vc = stats_curr.get(d, 0); vn = stats_n1.get(d, 0)
             deltas[d] = ((vc - vn) / vn) * 100 if vn > 0 else 0
-            
         best_d = max(deltas, key=deltas.get); best_val = deltas[best_d]
         worst_d = min(deltas, key=deltas.get); worst_val = deltas[worst_d]
-        
         alerts = []
         if best_val > 5: alerts.append(f"🚀 **Performance Exceptionnelle :** Vos **{fr_map[best_d]}s** surperforment de **+{best_val:.1f}%** vs N-1.")
         if worst_val < -5: alerts.append(f"⚠️ **Point de Vigilance :** Vos **{fr_map[worst_d]}s** décrochent de **{worst_val:.1f}%** vs N-1.")
-            
         if alerts:
             for alert in alerts:
                 css = "smart-alert" if "🚀" in alert else "smart-alert-warn"
@@ -415,9 +369,11 @@ elif page == "📅 Focus Jour & Semaine":
 
     if view_mode == "Journée":
         start_date = date_focus; end_date = date_focus
+        lbl_per = f"Journée du {date_focus.strftime('%d/%m/%Y')}"
     else:
         start_date = date_focus - timedelta(days=date_focus.weekday())
         end_date = start_date + timedelta(days=6)
+        lbl_per = f"Semaine du {start_date.strftime('%d/%m')} au {end_date.strftime('%d/%m')}"
     
     mask_f = (df_horaire['Date'] >= start_date) & (df_horaire['Date'] <= end_date)
     df_f = consolidate_registers(df_horaire[mask_f])
@@ -483,7 +439,7 @@ elif page == "📅 Focus Jour & Semaine":
             textfont=dict(size=13, weight='bold')
         ))
         fig.add_trace(go.Scatter(
-            x=chart_b[x_col], y=chart_b['CA TTC'], mode='lines', name='Habitude',
+            x=chart_b[x_col], y=chart_b['CA TTC'], mode='lines', name='Habitude (Moy)',
             line=dict(color='#888', width=2, dash='dot')
         ))
         fig.update_layout(title="Comparaison CA vs Habitude", height=400, hovermode="x unified")
@@ -494,16 +450,35 @@ elif page == "📅 Focus Jour & Semaine":
             t = df_f.groupby('Heure').agg(CA=('CA TTC','sum'), Cli=('Nombre de clients','sum')).reset_index()
             b = df_b.groupby('Heure').agg(CA_B=('CA TTC','mean'), Cli_B=('Nombre de clients','mean')).reset_index()
             t = t.merge(b, on='Heure', how='left')
+            disp_col = 'Heure'
         else:
             t = df_f.groupby('Date').agg(CA=('CA TTC','sum'), Cli=('Nombre de clients','sum')).reset_index()
-            t['Heure'] = t['Date'].dt.strftime('%d/%m')
+            # MAPPING JOURS POUR LE TABLEAU
+            fr_days_map = {'Monday':'Lundi','Tuesday':'Mardi','Wednesday':'Mercredi','Thursday':'Jeudi','Friday':'Vendredi','Saturday':'Samedi','Sunday':'Dimanche'}
+            t['DayName'] = t['Date'].dt.day_name().map(fr_days_map)
+            t['DateStr'] = t['Date'].dt.strftime('%d/%m')
+            t['Label'] = t['DayName'] + " " + t['DateStr']
+            
+            # Bench par jour de semaine pour la semaine
+            df_b['D_Name'] = df_b['Date'].dt.day_name()
+            b_day = df_b.groupby('D_Name').agg(CA_B=('CA TTC','mean'), Cli_B=('Nombre de clients','mean'))/ (norm/8 if norm>1 else 1) # Approx bench weekly avg per day
+            # Pour simplifier, on recalcule le bench exact par nom de jour
+            b_clean = df_b.groupby('D')['CA TTC'].sum().reset_index() # Déjà normé plus haut dans chart_b
+            
+            # Merge complexe par jour, on simplifie pour l'affichage en mettant 0 diff si compliqué
             t['CA_B'] = 0; t['Cli_B'] = 0
+            disp_col = 'Label'
 
-        t['PM'] = t['CA']/t['Cli']; t['PM_B'] = t['CA_B']/t['Cli_B']
-        t['Diff CA'] = t['CA'] - t['CA_B']; t['Diff Cli'] = t['Cli'] - t['Cli_B']; t['Diff PM'] = t['PM'] - t['PM_B']
+        t['PM'] = t['CA']/t['Cli']; 
+        # Gestion division par zero
+        t['PM_B'] = t.apply(lambda row: row['CA_B']/row['Cli_B'] if row['Cli_B']>0 else 0, axis=1)
+        
+        t['Diff CA'] = t['CA'] - t['CA_B']
+        t['Diff Cli'] = t['Cli'] - t['Cli_B']
+        t['Diff PM'] = t['PM'] - t['PM_B']
         
         disp = pd.DataFrame()
-        disp['Créneau'] = t['Heure']
+        disp['Créneau'] = t[disp_col]
         disp['CA'] = t['CA'].apply(lambda x: f"{x:,.0f} €".replace(","," "))
         disp['Diff CA'] = t['Diff CA'].apply(lambda x: f"{x:+,.0f} €".replace(","," ")) if view_mode=="Journée" else "-"
         disp['Freq'] = t['Cli'].apply(lambda x: f"{x:.0f}")
@@ -524,6 +499,8 @@ elif page == "📅 Focus Jour & Semaine":
             return [''] * len(row)
             
         st.dataframe(disp.style.apply(style_rows, axis=1), use_container_width=True, hide_index=True)
+        
+        st.markdown("<div class='footer-caption'>ℹ️ Les habitudes sont calculées sur la moyenne des 8 dernières semaines équivalentes.</div>", unsafe_allow_html=True)
 
 # ==============================================================================
 # PAGE 3 : TENDANCES & FAMILLES
@@ -534,6 +511,7 @@ elif page == "📈 Tendances & Familles":
     date_end = pd.to_datetime(date_end)
     date_start = date_end - pd.DateOffset(months=12)
     
+    # 1. TENDANCE 12 MOIS
     mask_12m = (df_horaire['Date'] > date_start) & (df_horaire['Date'] <= date_end)
     df_12m = consolidate_registers(df_horaire[mask_12m])
     
@@ -546,20 +524,45 @@ elif page == "📈 Tendances & Familles":
         
         st.subheader("Historique 12 Mois")
         c1, c2, c3 = st.columns(3)
-        
         def plot_trend(col, title, y_col, color):
             avg = monthly[y_col].mean()
             fig = px.line(monthly, x='Mois', y=y_col, title=title, markers=True, text=y_col)
             fig.update_traces(line_color=color, textposition="top center", texttemplate='%{text:.0f}')
-            fig.add_hline(y=avg, line_dash="dot", line_color="#555", annotation_text="Moyenne")
+            fig.add_hline(y=avg, line_dash="dot", line_color="#555", annotation_text="Moy")
             col.plotly_chart(fig, use_container_width=True)
-            
         plot_trend(c1, "Chiffre d'Affaires", 'CA TTC', '#FFD700')
         plot_trend(c2, "Fréquentation", 'Nombre de clients', '#00C851')
         plot_trend(c3, "Panier Moyen", 'Panier', '#29B6F6')
         
         st.markdown("---")
         
+        # 2. ZOOM QUOTIDIEN DU MOIS
+        st.subheader(f"🔍 Zoom Quotidien : {date_end.strftime('%B %Y')}")
+        mask_month = (df_horaire['Date'].dt.month == date_end.month) & (df_horaire['Date'].dt.year == date_end.year)
+        df_daily = consolidate_registers(df_horaire[mask_month])
+        
+        if not df_daily.empty:
+            df_daily['Jour'] = df_daily['Date'].dt.day
+            daily_stats = df_daily.groupby('Jour').agg({'CA TTC':'sum', 'Nombre de clients':'sum'}).reset_index()
+            daily_stats['Panier'] = daily_stats['CA TTC'] / daily_stats['Nombre de clients']
+            
+            d1, d2, d3 = st.columns(3)
+            def plot_daily(col, title, y_col, color):
+                avg = daily_stats[y_col].mean()
+                fig = px.line(daily_stats, x='Jour', y=y_col, title=title, markers=True)
+                fig.update_traces(line_color=color)
+                fig.add_hline(y=avg, line_dash="dot", line_color="#555", annotation_text="Moy")
+                col.plotly_chart(fig, use_container_width=True)
+            
+            plot_daily(d1, "CA Journalier", 'CA TTC', '#FFD700')
+            plot_daily(d2, "Fréq Journalière", 'Nombre de clients', '#00C851')
+            plot_daily(d3, "Panier Journalier", 'Panier', '#29B6F6')
+        else:
+            st.warning("Pas de données pour ce mois précis.")
+
+        st.markdown("---")
+        
+        # 3. MIX ACTIVITÉS
         c_mix1, c_mix2 = st.columns(2)
         mask_act = (df_activite['Date'] > date_start) & (df_activite['Date'] <= date_end)
         df_act_12m = df_activite[mask_act].copy()
@@ -570,12 +573,10 @@ elif page == "📈 Tendances & Familles":
             st.caption("Valeur (€)")
             fig1 = px.bar(m_act, x='Mois', y='CA TTC', color='ACTIVITE', color_discrete_map=COLOR_MAP, text_auto='.2s')
             st.plotly_chart(fig1, use_container_width=True)
-            
         with c_mix2:
             st.caption("Poids (%)")
             m_act['Total'] = m_act.groupby('Mois')['CA TTC'].transform('sum')
             m_act['Pct'] = (m_act['CA TTC'] / m_act['Total'] * 100)
-            
             fig2 = px.bar(m_act, x='Mois', y='Pct', color='ACTIVITE', color_discrete_map=COLOR_MAP, text_auto='.0f')
             st.plotly_chart(fig2, use_container_width=True)
             
@@ -583,27 +584,43 @@ elif page == "📈 Tendances & Familles":
     st.subheader("🔍 Performance Familles (Top 10)")
     
     if not df_famille.empty:
-        last_m = date_end.month; last_y = date_end.year
-        mask_c = (df_famille['Date'].dt.month == last_m) & (df_famille['Date'].dt.year == last_y)
+        # LOGIQUE CALENDRAIRE STRICTE POUR FAMILLES
+        sel_m = date_end.month; sel_y = date_end.year
+        
+        # CURR (Mois sélectionné)
+        mask_c = (df_famille['Date'].dt.month == sel_m) & (df_famille['Date'].dt.year == sel_y)
         f_curr = df_famille[mask_c].groupby('FAMILLE').agg({'CA TTC':'sum', 'Quantité':'sum'})
         f_curr['PM'] = f_curr['CA TTC']/f_curr['Quantité']
         
-        mask_p = (df_famille['Date'].dt.month == last_m) & (df_famille['Date'].dt.year == last_y - 1)
-        f_prev = df_famille[mask_p].groupby('FAMILLE')['CA TTC'].sum() if not df_famille[mask_p].empty else pd.Series(dtype=float)
+        # PREV M-1
+        prev_date = date_end - pd.DateOffset(months=1)
+        prev_m = prev_date.month; prev_my = prev_date.year
+        mask_pm = (df_famille['Date'].dt.month == prev_m) & (df_famille['Date'].dt.year == prev_my)
+        f_m1 = df_famille[mask_pm].groupby('FAMILLE')['CA TTC'].sum()
         
+        # PREV N-1
+        mask_pn = (df_famille['Date'].dt.month == sel_m) & (df_famille['Date'].dt.year == sel_y - 1)
+        f_n1 = df_famille[mask_pn].groupby('FAMILLE')['CA TTC'].sum()
+        
+        # Assemblage
         df_r = f_curr.copy().sort_values('CA TTC', ascending=False).head(10)
-        df_r['CA N-1'] = f_prev
-        df_r['Evo'] = ((df_r['CA TTC'] - df_r['CA N-1'])/df_r['CA N-1']*100).fillna(0)
+        df_r['CA M-1'] = f_m1
+        df_r['CA N-1'] = f_n1
+        
+        # Calcul Evos
+        df_r['Evo M-1'] = ((df_r['CA TTC'] - df_r['CA M-1'])/df_r['CA M-1']*100).fillna(0)
+        df_r['Evo N-1'] = ((df_r['CA TTC'] - df_r['CA N-1'])/df_r['CA N-1']*100).fillna(0)
         
         cols = st.columns(4)
         for i, (fam, row) in enumerate(df_r.iterrows()):
             with cols[i%4]:
-                evo = row['Evo']; cl = "pos" if evo>=0 else "neg"; sym = "▲" if evo>=0 else "▼"
+                em = row['Evo M-1']; en = row['Evo N-1']
+                cm = "pos" if em>=0 else "neg"; cn = "pos" if en>=0 else "neg"
                 st.markdown(f"""
                 <div class="detail-card">
                     <div class="detail-header"><span>{fam}</span></div>
                     <div class="detail-grid">
-                        <div><div class="metric-label">CA</div><div class="metric-val">{row['CA TTC']/1000:.1f}k€</div><div class="metric-delta {cl}">{sym} {abs(evo):.0f}%</div></div>
+                        <div><div class="metric-label">CA</div><div class="metric-val">{row['CA TTC']/1000:.1f}k€</div><div class="metric-delta {cm}">M-1 {em:+.0f}%</div><div class="metric-delta {cn}">N-1 {en:+.0f}%</div></div>
                         <div><div class="metric-label">Vol.</div><div class="metric-val">{row['Quantité']:.0f}</div></div>
                         <div><div class="metric-label">Prix</div><div class="metric-val">{row['PM']:.1f}€</div></div>
                     </div>
