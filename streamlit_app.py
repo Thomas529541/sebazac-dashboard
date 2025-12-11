@@ -5,19 +5,65 @@ import plotly.graph_objects as go
 import numpy as np
 from datetime import timedelta
 
-# --- CONFIGURATION PAGE & CSS ---
-st.set_page_config(page_title="Pilotage Commerce V12", layout="wide", page_icon="🎯")
+# --- CONFIGURATION PAGE ---
+st.set_page_config(page_title="Pilotage Commerce V13", layout="wide", page_icon="🔐")
 
+# ==============================================================================
+# 🔐 SÉCURITÉ : LE PORTIER (RÉINTÉGRÉ)
+# ==============================================================================
+def check_password():
+    """Retourne True si le mot de passe est bon."""
+    
+    # 1. Vérification configuration
+    if "password" not in st.secrets:
+        st.error("⚠️ Le mot de passe n'est pas configuré dans les Secrets Streamlit.")
+        st.info("Ajoutez une ligne : password = 'votre_mot_de_passe' dans les settings.")
+        return False
+
+    def password_entered():
+        """Vérifie si le mot de passe saisi correspond."""
+        if st.session_state["password"] == st.secrets["password"]:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # Sécurité : on efface le mdp de la mémoire
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        # Premier chargement
+        st.text_input("🔒 Mot de passe requis", type="password", on_change=password_entered, key="password")
+        return False
+    
+    elif not st.session_state["password_correct"]:
+        # Mot de passe faux
+        st.text_input("🔒 Mot de passe requis", type="password", on_change=password_entered, key="password")
+        st.error("😕 Mot de passe incorrect")
+        return False
+    
+    else:
+        # Mot de passe bon
+        return True
+
+if not check_password():
+    st.stop()  # 🛑 ARRÊT IMMÉDIAT SI PAS CONNECTÉ
+
+# ==============================================================================
+# 🎨 CSS & DESIGN
+# ==============================================================================
 st.markdown("""
 <style>
     /* RESET ET MARGES */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
-    .block-container {
-        padding-top: 1rem !important;
-        padding-bottom: 3rem !important;
-        margin-top: 0rem !important;
+    
+    /* GESTION MOBILE */
+    @media (min-width: 993px) {
+        .block-container { padding-top: 1rem !important; padding-bottom: 3rem !important; margin-top: 0rem !important; }
+    }
+    @media (max-width: 992px) {
+        header { visibility: visible !important; background: transparent !important; }
+        [data-testid="stHeader"] { visibility: visible !important; z-index: 99999 !important; background-color: rgba(0,0,0,0) !important; }
+        .block-container { padding-top: 4rem !important; margin-top: 0rem !important; }
     }
     
     /* KPI GLOBAL STYLES */
@@ -58,6 +104,19 @@ st.markdown("""
         text-align: center; font-size: 13px; color: #aaa; 
         background-color: #252525; padding: 5px; border-radius: 5px; margin-top: -10px; margin-bottom: 10px;
     }
+    
+    /* ALERTES */
+    .smart-alert {
+        background-color: #2b3e50; color: #e0e0e0; padding: 15px; border-radius: 8px;
+        border-left: 5px solid #00C851; margin-bottom: 15px; font-size: 15px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    .smart-alert-warn {
+        background-color: #3e2b2b; color: #e0e0e0; padding: 15px; border-radius: 8px;
+        border-left: 5px solid #FF4444; margin-bottom: 15px; font-size: 15px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    .footer-caption { text-align: center; color: #666; font-size: 12px; margin-top: 30px; font-style: italic; }
 
     /* COULEURS */
     .pos { color: #00FF00; }
@@ -355,11 +414,9 @@ elif page == "📅 Focus Jour & Semaine":
 
     if view_mode == "Journée":
         start_date = date_focus; end_date = date_focus
-        lbl_per = f"Journée du {date_focus.strftime('%d/%m/%Y')}"
     else:
         start_date = date_focus - timedelta(days=date_focus.weekday())
         end_date = start_date + timedelta(days=6)
-        lbl_per = f"Semaine du {start_date.strftime('%d/%m')} au {end_date.strftime('%d/%m')}"
     
     mask_f = (df_horaire['Date'] >= start_date) & (df_horaire['Date'] <= end_date)
     df_f = consolidate_registers(df_horaire[mask_f])
@@ -521,7 +578,6 @@ elif page == "📅 Focus Jour & Semaine":
         else:
             df_fb = df_fb_raw
             
-        # On calcule le diff pour toutes les familles d'un coup
         fam_f = df_ff.groupby('FAMILLE')['CA TTC'].sum()
         fam_b = df_fb.groupby('FAMILLE')['CA TTC'].sum() / norm
         fam_res = pd.DataFrame({'CA_F': fam_f, 'CA_B': fam_b}).fillna(0)
@@ -541,13 +597,6 @@ elif page == "📅 Focus Jour & Semaine":
                     pm_b = row['CA_B']/row['Qty_B'] if row['Qty_B']>0 else 0
                     diff_pm = row['PM_F'] - pm_b
                     c3.metric("Panier", f"{row['PM_F']:.2f}€", f"{diff_pm:+.2f}€")
-                    
-                    # DRILL DOWN FAMILLES : On essaie de deviner les familles associées à l'activité
-                    # Comme on n'a pas de lien direct, on va filtrer les familles qui contiennent le nom de l'activité
-                    # OU MIEUX : On affiche juste les familles qui ont eu un mouvement significatif et dont le nom
-                    # n'est pas aberrant. C'est une approximation faute de mapping.
-                    # Pour faire propre : On affiche le TOP 5 FAMILLES GLOBALES en variation
-                    # Mais ici on est DANS l'activité.
                     
                     st.caption("Détail familles non disponible par activité (données brutes sans lien hiérarchique).")
 
@@ -626,7 +675,7 @@ elif page == "📈 Tendances & Familles":
             d1, d2, d3 = st.columns(3)
             def plot_daily(col, title, y_col, color):
                 avg = daily_stats[y_col].mean()
-                fig = px.line(daily_stats, x='Jour', y=y_col, title=title, markers=True, text=y_col)
+                fig = px.line(daily_stats, x='Jour', y=y_col, title=title, markers=True)
                 fig.update_traces(line_color=color, textposition="top center", texttemplate='%{text:.0f}')
                 fig.add_hline(y=avg, line_dash="dot", line_color="#555", annotation_text="Moy")
                 col.plotly_chart(fig, use_container_width=True)
